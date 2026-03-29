@@ -1,0 +1,14 @@
+{
+    "name": "CampaignSms",
+    "alias": "campaignsms",
+    "description": "Bulk SMS campaigns, token balance, and medicine refill reminders",
+    "keywords": [],
+    "active": 1,
+    "order": 0,
+    "providers": [
+        "Modules\\CampaignSms\\Providers\\CampaignSmsServiceProvider"
+    ],
+    "aliases": {},
+    "files": [],
+    "requires": []
+}

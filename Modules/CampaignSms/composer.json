@@ -1,0 +1,16 @@
+{
+    "name": "tabwins/campaign-sms",
+    "description": "Campaign SMS module for UltimatePOS",
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Modules\\CampaignSms\\Providers\\CampaignSmsServiceProvider"
+            ]
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\CampaignSms\\": ""
+        }
+    }
+}

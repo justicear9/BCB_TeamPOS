@@ -1,0 +1,16 @@
+{
+    "name": "tabwins/inventory-reporting",
+    "description": "Inventory reporting module for TeamPOS",
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Modules\\InventoryReporting\\Providers\\InventoryReportingServiceProvider"
+            ]
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\InventoryReporting\\": ""
+        }
+    }
+}

@@ -1,0 +1,14 @@
+{
+    "name": "InventoryReporting",
+    "alias": "inventoryreporting",
+    "description": "Inventory management, stock reset, lot editing, and advanced stock reports",
+    "keywords": [],
+    "active": 1,
+    "order": 0,
+    "providers": [
+        "Modules\\InventoryReporting\\Providers\\InventoryReportingServiceProvider"
+    ],
+    "aliases": {},
+    "files": [],
+    "requires": []
+}
