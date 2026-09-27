@@ -57,7 +57,7 @@
                         @endswitch
                     </p>
                     @if($asset->disposed_at)
-                    <p><strong>@lang('accounting::lang.disposed_at'):</strong> @format_date($asset->disposed_at)</p>
+                    <p><strong>@lang('accounting::lang.disposed_at'):</strong> {{ \App\Utils\Util::bladeFormatDate($asset->disposed_at) }}</p>
                     @endif
                     <p><strong>@lang('accounting::lang.useful_life_months'):</strong>
                         {{ $asset->useful_life_months ?? '—' }}
@@ -71,7 +71,7 @@
     <div class="box box-solid">
         <div class="box-header"><h4 class="box-title">@lang('accounting::lang.acquisition_journal')</h4></div>
         <div class="box-body">
-            <p>{{ $asset->acquisitionMapping->ref_no }} — @format_date($asset->acquisitionMapping->operation_date)</p>
+            <p>{{ $asset->acquisitionMapping->ref_no }} — {{ \App\Utils\Util::bladeFormatDate($asset->acquisitionMapping->operation_date) }}</p>
         </div>
     </div>
     @endif
@@ -80,7 +80,7 @@
     <div class="box box-solid">
         <div class="box-header"><h4 class="box-title">@lang('accounting::lang.disposal_journal')</h4></div>
         <div class="box-body">
-            <p>{{ $asset->disposalMapping->ref_no }} — @format_date($asset->disposalMapping->operation_date)</p>
+            <p>{{ $asset->disposalMapping->ref_no }} — {{ \App\Utils\Util::bladeFormatDate($asset->disposalMapping->operation_date) }}</p>
         </div>
     </div>
     @endif

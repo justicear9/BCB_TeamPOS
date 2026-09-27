@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\BusinessLocation;
+use App\Events\OpeningStockCreatedOrModified;
 use App\Product;
 use App\PurchaseLine;
 use App\Transaction;
@@ -166,6 +167,9 @@ class OpeningStockController extends Controller
                 $transaction_date = request()->session()->get('financial_year.start');
                 $transaction_date = \Carbon::createFromFormat('Y-m-d', $transaction_date)->toDateTimeString();
 
+                $openingStockAccountingDeleted = [];
+                $openingStockAccountingSavedIds = [];
+
                 DB::beginTransaction();
 
                 //$key_os is the location_id
@@ -277,6 +281,7 @@ class OpeningStockController extends Controller
                                 $transaction->update();
 
                                 $updated_transaction_ids[] = $transaction->id;
+                                $openingStockAccountingSavedIds[] = $transaction->id;
                                 //unset deleted purchase lines
                                 $delete_purchase_line_ids = [];
                                 $delete_purchase_lines = null;
@@ -320,6 +325,10 @@ class OpeningStockController extends Controller
 
                         if (count($delete_transactions) > 0) {
                             foreach ($delete_transactions as $delete_transaction) {
+                                $openingStockAccountingDeleted[] = [
+                                    'business_id' => (int) $business_id,
+                                    'transaction_id' => (int) $delete_transaction->id,
+                                ];
                                 $delete_purchase_lines = $delete_transaction->purchase_lines;
 
                                 foreach ($delete_purchase_lines as $delete_purchase_line) {
@@ -358,6 +367,8 @@ class OpeningStockController extends Controller
 
                                 $transaction->purchase_lines()->saveMany([$new_purchase_line]);
 
+                                $openingStockAccountingSavedIds[] = $transaction->id;
+
                                 //Adjust stock over selling if found
                                 $this->productUtil->adjustStockOverSelling($transaction);
                             }
@@ -366,6 +377,16 @@ class OpeningStockController extends Controller
                 }
 
                 DB::commit();
+
+                foreach ($openingStockAccountingDeleted as $pair) {
+                    event(new OpeningStockCreatedOrModified('deleted', null, $pair['business_id'], $pair['transaction_id']));
+                }
+                foreach (array_values(array_unique($openingStockAccountingSavedIds)) as $tid) {
+                    $t = Transaction::find($tid);
+                    if ($t) {
+                        event(new OpeningStockCreatedOrModified('saved', $t));
+                    }
+                }
             }
 
             $output = ['success' => 1,

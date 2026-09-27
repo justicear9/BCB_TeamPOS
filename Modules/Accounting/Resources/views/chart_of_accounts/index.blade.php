@@ -34,6 +34,15 @@
             @component('components.widget', ['class' => 'box-solid'])
             @slot('tool')
                 <div class="box-tools">
+                    <a class="tw-dw-btn tw-bg-gradient-to-r tw-from-emerald-600 tw-to-teal-500 tw-font-bold tw-text-white tw-border-none tw-rounded-full tw-mr-2"
+                        href="{{ route('accounting.chart_of_accounts.import_template') }}">
+                        <i class="fa fa-download"></i> @lang('accounting::lang.download_import_template')
+                    </a>
+                    <button type="button"
+                        class="tw-dw-btn tw-bg-gradient-to-r tw-from-amber-600 tw-to-orange-500 tw-font-bold tw-text-white tw-border-none tw-rounded-full tw-mr-2"
+                        id="coa_import_btn">
+                        <i class="fa fa-upload"></i> @lang('accounting::lang.import_chart_of_accounts')
+                    </button>
                     <a class="tw-dw-btn tw-bg-gradient-to-r tw-from-indigo-600 tw-to-blue-500 tw-font-bold tw-text-white tw-border-none tw-rounded-full btn-modal"
                         href="{{action([\Modules\Accounting\Http\Controllers\CoaController::class, 'create'])}}" 
                         data-href="{{action([\Modules\Accounting\Http\Controllers\CoaController::class, 'create'])}}" 
@@ -80,6 +89,10 @@
         </div>
     </div>
 </section>
+<form id="coa_import_form" action="{{ route('accounting.chart_of_accounts.import') }}" method="POST" enctype="multipart/form-data" class="hide">
+    @csrf
+    <input type="file" id="coa_csv" name="coa_csv" accept=".csv,text/csv">
+</form>
 <div class="modal fade" id="create_account_modal" tabindex="-1" role="dialog">
 </div>
 @stop
@@ -106,6 +119,24 @@
         }
     });
 
+    function initCoaTabularDataTable() {
+        var $t = $('#coa_tabular_accounts_table');
+        if ($t.length === 0) {
+            return;
+        }
+        if ($t.find('tbody tr td[colspan]').length) {
+            return;
+        }
+        $t.DataTable({
+            order: [[2, 'asc']],
+            columnDefs: [
+                { targets: [0], orderable: false, searchable: false },
+            ],
+            pageLength: 50,
+            lengthMenu: [[25, 50, 100, -1], [25, 50, 100, @json(__('lang_v1.all'))]],
+        });
+    }
+
     function load_accounts_table(view_type='table'){
         var data = {view_type: view_type};
 
@@ -121,7 +152,11 @@
             dataType: 'html',
             success: function(html) {
                 if(view_type=='table') {
+                    if ($.fn.DataTable.isDataTable('#coa_tabular_accounts_table')) {
+                        $('#coa_tabular_accounts_table').DataTable().destroy();
+                    }
                     $('#accounts_table').html(html);
+                    initCoaTabularDataTable();
                 } else {
                     $('#accounts_tree').html(html);
 
@@ -247,6 +282,15 @@
     })
     $(document).on('click', 'a.ledger-link', function(e) {
         window.location.href = $(this).attr('href');
+    });
+
+    $(document).on('click', '#coa_import_btn', function() {
+        $('#coa_csv').trigger('click');
+    });
+    $(document).on('change', '#coa_csv', function() {
+        if (this.files && this.files.length > 0) {
+            $('#coa_import_form').submit();
+        }
     });
 </script>
 @endsection

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Business;
 use App\BusinessLocation;
+use App\Events\OpeningStockCreatedOrModified;
 use App\Product;
 use App\Transaction;
 use App\Utils\ProductUtil;
@@ -266,5 +267,7 @@ class ImportOpeningStockController extends Controller
         ]);
         //Update variation location details
         $this->productUtil->updateProductQuantity($opening_stock['location_id'], $product->id, $product->variation_id, $opening_stock['quantity']);
+
+        event(new OpeningStockCreatedOrModified('saved', $transaction));
     }
 }

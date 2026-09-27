@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\BusinessLocation;
 use App\Contact;
+use App\Events\SellCreatedOrModified;
 use App\Product;
 use App\TaxRate;
 use App\Transaction;
@@ -184,9 +185,16 @@ class ImportSalesController extends Controller
             ini_set('max_execution_time', 0);
             ini_set('memory_limit', -1);
 
-            $this->__importSales($formatted_sales_data, $business_id, $location_id);
+            $imported_transaction_ids = $this->__importSales($formatted_sales_data, $business_id, $location_id);
 
             DB::commit();
+
+            foreach ($imported_transaction_ids as $tx_id) {
+                $transaction = Transaction::with('sell_lines')->find($tx_id);
+                if ($transaction) {
+                    SellCreatedOrModified::dispatch($transaction);
+                }
+            }
 
             $output = ['success' => 1,
                 'msg' => __('lang_v1.sales_imported_successfully'),
@@ -209,8 +217,12 @@ class ImportSalesController extends Controller
         return redirect('import-sales')->with('status', $output);
     }
 
-    private function __importSales($formated_data, $business_id, $location_id)
+    /**
+     * @return array<int> New sell transaction ids (for post-commit hooks such as accounting GL).
+     */
+    private function __importSales($formated_data, $business_id, $location_id): array
     {
+        $imported_transaction_ids = [];
         $import_batch = Transaction::where('business_id', $business_id)->max('import_batch');
 
         if (empty($import_batch)) {
@@ -320,6 +332,10 @@ class ImportSalesController extends Controller
             }
 
             $first_sell_line = $data[0];
+            // Invoice total must match the sum of imported lines. The sheet "Order Total" column is often
+            // wrong or from another system; using it can make final_total disagree with line items by thousands.
+            $invoice_total_amount = (float) $order_total;
+
             //get contact
             if (! empty($first_sell_line['customer_phone_number'])) {
                 $contact = Contact::where('business_id', $business_id)
@@ -347,7 +363,7 @@ class ImportSalesController extends Controller
                 'location_id' => $location_id,
                 'status' => 'final',
                 'contact_id' => $contact->id,
-                'final_total' => ! empty($first_sell_line['order_total']) ? $first_sell_line['order_total'] : $order_total,
+                'final_total' => $invoice_total_amount,
                 'transaction_date' => ! empty($first_sell_line['date']) ? $first_sell_line['date'] : $now,
                 'discount_amount' => 0,
                 'import_batch' => $import_batch,
@@ -373,7 +389,7 @@ class ImportSalesController extends Controller
             }
 
             $invoice_total = [
-                'total_before_tax' => ! empty($first_sell_line['order_total']) ? $first_sell_line['order_total'] : $order_total,
+                'total_before_tax' => $invoice_total_amount,
                 'tax' => 0,
             ];
 
@@ -426,8 +442,8 @@ class ImportSalesController extends Controller
                 }
             }
 
-            //Update payment status
-            $this->transactionUtil->updatePaymentStatus($transaction->id, $transaction->final_total);
+            // Keep imported sales unpaid; payment should be recorded separately.
+            $this->transactionUtil->updatePaymentStatus($transaction->id, 0);
 
             $business_details = $this->businessUtil->getDetails($business_id);
             $pos_settings = empty($business_details->pos_settings) ? $this->businessUtil->defaultPosSettings() : json_decode($business_details->pos_settings, true);
@@ -438,7 +454,11 @@ class ImportSalesController extends Controller
                 'pos_settings' => $pos_settings,
             ];
             $this->transactionUtil->mapPurchaseSell($business, $transaction->sell_lines, 'purchase');
+
+            $imported_transaction_ids[] = $transaction->id;
         }
+
+        return $imported_transaction_ids;
     }
 
     private function __formatSaleData($imported_data, $import_fields, $group_by)

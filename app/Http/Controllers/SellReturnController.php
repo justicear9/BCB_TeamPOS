@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\BusinessLocation;
 use App\Contact;
+use App\Events\SalesReturnCreatedOrModified;
 use App\Events\TransactionPaymentDeleted;
 use App\Transaction;
 use App\TransactionSellLine;
@@ -343,6 +344,10 @@ class SellReturnController extends Controller
             ->with(['sell_lines', 'location', 'return_parent', 'contact', 'tax', 'sell_lines.sub_unit', 'sell_lines.product', 'sell_lines.product.unit'])
             ->find($id);
 
+        if (empty($sell)) {
+            abort(404);
+        }
+
         foreach ($sell->sell_lines as $key => $value) {
             if (!empty($value->sub_unit_id)) {
                 $formated_sell_line = $this->transactionUtil->recalculateSellLineTotals($business_id, $value);
@@ -368,6 +373,10 @@ class SellReturnController extends Controller
             abort(403, 'Unauthorized action.');
         }
 
+        $output = ['success' => 0,
+            'msg' => __('lang_v1.no_products_to_return'),
+        ];
+
         try {
             $input = $request->except('_token');
 
@@ -391,6 +400,8 @@ class SellReturnController extends Controller
                 $this->moduleUtil->getModuleData('after_sales_return', ['transaction' => $sell_return]);
 
                 DB::commit();
+
+                event(new SalesReturnCreatedOrModified('saved', $sell_return->fresh()));
 
                 $output = ['success' => 1,
                     'msg' => __('lang_v1.success'),
@@ -444,9 +455,13 @@ class SellReturnController extends Controller
             );
 
         if (!auth()->user()->can('access_sell_return') && auth()->user()->can('access_own_sell_return')) {
-            $sells->where('created_by', request()->session()->get('user.id'));
+            $query->where('created_by', request()->session()->get('user.id'));
         }
         $sell = $query->first();
+
+        if (empty($sell)) {
+            abort(404);
+        }
 
         foreach ($sell->sell_lines as $key => $value) {
             if (!empty($value->sub_unit_id)) {
@@ -511,9 +526,20 @@ class SellReturnController extends Controller
                     ->with(['sell_lines', 'payment_lines']);
 
                 if (!auth()->user()->can('access_sell_return') && auth()->user()->can('access_own_sell_return')) {
-                    $sells->where('created_by', request()->session()->get('user.id'));
+                    $query->where('created_by', request()->session()->get('user.id'));
                 }
                 $sell_return = $query->first();
+
+                if (empty($sell_return)) {
+                    DB::rollBack();
+
+                    return ['success' => 0,
+                        'msg' => __('messages.something_went_wrong'),
+                    ];
+                }
+
+                $parent_sell_id = (int) $sell_return->return_parent_id;
+                $sell_return_id = (int) $sell_return->id;
 
                 $sell_lines = TransactionSellLine::where('transaction_id',
                     $sell_return->return_parent_id)
@@ -545,6 +571,9 @@ class SellReturnController extends Controller
                 }
 
                 DB::commit();
+
+                event(new SalesReturnCreatedOrModified('deleted', null, $business_id, $sell_return_id, $parent_sell_id));
+
                 $output = ['success' => 1,
                     'msg' => __('lang_v1.success'),
                 ];

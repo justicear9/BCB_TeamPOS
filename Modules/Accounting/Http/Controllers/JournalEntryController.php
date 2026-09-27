@@ -3,6 +3,7 @@
 namespace Modules\Accounting\Http\Controllers;
 
 use App\BusinessLocation;
+use App\Contact;
 use App\Utils\ModuleUtil;
 use App\Utils\Util;
 use Illuminate\Http\Request;
@@ -131,7 +132,7 @@ class JournalEntryController extends Controller
             abort(403, 'Unauthorized action.');
         }
 
-        $business_locations = BusinessLocation::forDropdown($business_id, true);
+        $business_locations = BusinessLocation::forDropdown($business_id, false);
 
         return view('accounting::journal_entry.create')->with(compact('business_locations'));
     }
@@ -164,9 +165,7 @@ class JournalEntryController extends Controller
 
             $op_date = $this->util->uf_date($journal_date, true);
             $this->accountingUtil->assertOperationDateNotLocked($business_id, $op_date);
-
-            $location_id = $request->input('location_id');
-            $location_id = ($location_id === '' || $location_id === null) ? null : (int) $location_id;
+            $this->accountingUtil->assertJournalEntryLinesBalanced($account_ids, $debits, $credits);
 
             $accounting_settings = $this->accountingUtil->getAccountingSettings($business_id);
 
@@ -191,30 +190,41 @@ class JournalEntryController extends Controller
 
             //save details in account trnsactions table
             foreach ($account_ids as $index => $account_id) {
-                if (! empty($account_id)) {
-                    $transaction_row = [];
-                    $transaction_row['accounting_account_id'] = $account_id;
-
-                    if (! empty($credits[$index])) {
-                        $transaction_row['amount'] = $credits[$index];
-                        $transaction_row['type'] = 'credit';
-                    }
-
-                    if (! empty($debits[$index])) {
-                        $transaction_row['amount'] = $debits[$index];
-                        $transaction_row['type'] = 'debit';
-                    }
-
-                    $transaction_row['created_by'] = $user_id;
-                    $transaction_row['operation_date'] = $op_date;
-                    $transaction_row['sub_type'] = 'journal_entry';
-                    $transaction_row['acc_trans_mapping_id'] = $acc_trans_mapping->id;
-                    $transaction_row['location_id'] = $location_id;
-
-                    $accounts_transactions = new AccountingAccountsTransaction();
-                    $accounts_transactions->fill($transaction_row);
-                    $accounts_transactions->save();
+                if (empty($account_id)) {
+                    continue;
                 }
+
+                $creditAmount = $this->util->num_uf($credits[$index] ?? '');
+                $debitAmount = $this->util->num_uf($debits[$index] ?? '');
+
+                if ($creditAmount <= 0 && $debitAmount <= 0) {
+                    continue;
+                }
+
+                if ($creditAmount > 0 && $debitAmount > 0) {
+                    throw new \RuntimeException(__('accounting::lang.journal_line_debit_credit_exclusive'));
+                }
+
+                $transaction_row = [];
+                $transaction_row['accounting_account_id'] = $account_id;
+                if ($creditAmount > 0) {
+                    $transaction_row['amount'] = $creditAmount;
+                    $transaction_row['type'] = 'credit';
+                } else {
+                    $transaction_row['amount'] = $debitAmount;
+                    $transaction_row['type'] = 'debit';
+                }
+
+                $transaction_row = array_merge($transaction_row, $this->journalLineExtras($request, (int) $index, $business_id));
+
+                $transaction_row['created_by'] = $user_id;
+                $transaction_row['operation_date'] = $op_date;
+                $transaction_row['sub_type'] = 'journal_entry';
+                $transaction_row['acc_trans_mapping_id'] = $acc_trans_mapping->id;
+
+                $accounts_transactions = new AccountingAccountsTransaction();
+                $accounts_transactions->fill($transaction_row);
+                $accounts_transactions->save();
             }
 
             DB::commit();
@@ -288,16 +298,16 @@ class JournalEntryController extends Controller
                     ->where('type', 'journal_entry')
                     ->where('id', $id)
                     ->firstOrFail();
-        $accounts_transactions = AccountingAccountsTransaction::with('account')
-                                    ->where('acc_trans_mapping_id', $id)
-                                    ->get()->toArray();
+        $lines = AccountingAccountsTransaction::with(['account', 'contact'])
+            ->where('acc_trans_mapping_id', $id)
+            ->orderBy('id')
+            ->get();
 
-        $business_locations = BusinessLocation::forDropdown($business_id, true);
-        $first_line = AccountingAccountsTransaction::where('acc_trans_mapping_id', $id)->first();
-        $journal_location_id = $first_line ? $first_line->location_id : null;
+        $business_locations = BusinessLocation::forDropdown($business_id, false);
+        $size = max($lines->count(), 10);
 
         return view('accounting::journal_entry.edit')
-            ->with(compact('journal', 'accounts_transactions', 'business_locations', 'journal_location_id'));
+            ->with(compact('journal', 'lines', 'business_locations', 'size'));
     }
 
     /**
@@ -346,6 +356,7 @@ class JournalEntryController extends Controller
 
             $op_date = $this->util->uf_date($journal_date, true);
             $this->accountingUtil->assertOperationDateNotLocked($business_id, $op_date);
+            $this->accountingUtil->assertJournalEntryLinesBalanced($account_ids, $debits, $credits);
 
             $location_id = $request->input('location_id');
             $location_id = ($location_id === '' || $location_id === null) ? null : (int) $location_id;
@@ -356,37 +367,55 @@ class JournalEntryController extends Controller
 
             //save details in account trnsactions table
             foreach ($account_ids as $index => $account_id) {
-                if (! empty($account_id)) {
-                    $transaction_row = [];
-                    $transaction_row['accounting_account_id'] = $account_id;
+                $creditAmount = $this->util->num_uf($credits[$index] ?? '');
+                $debitAmount = $this->util->num_uf($debits[$index] ?? '');
+                $existing_id = $accounts_transactions_id[$index] ?? null;
 
-                    if (! empty($credits[$index])) {
-                        $transaction_row['amount'] = $credits[$index];
-                        $transaction_row['type'] = 'credit';
+                if (empty($account_id)) {
+                    if (! empty($existing_id)) {
+                        AccountingAccountsTransaction::where('id', $existing_id)->delete();
                     }
 
-                    if (! empty($debits[$index])) {
-                        $transaction_row['amount'] = $debits[$index];
-                        $transaction_row['type'] = 'debit';
+                    continue;
+                }
+
+                if ($creditAmount <= 0 && $debitAmount <= 0) {
+                    if (! empty($existing_id)) {
+                        AccountingAccountsTransaction::where('id', $existing_id)->delete();
                     }
 
-                    $transaction_row['created_by'] = $user_id;
-                    $transaction_row['operation_date'] = $op_date;
-                    $transaction_row['sub_type'] = 'journal_entry';
-                    $transaction_row['acc_trans_mapping_id'] = $acc_trans_mapping->id;
-                    $transaction_row['location_id'] = $location_id;
+                    continue;
+                }
 
-                    if (! empty($accounts_transactions_id[$index])) {
-                        $accounts_transactions = AccountingAccountsTransaction::find($accounts_transactions_id[$index]);
-                        $accounts_transactions->fill($transaction_row);
-                        $accounts_transactions->update();
-                    } else {
-                        $accounts_transactions = new AccountingAccountsTransaction();
-                        $accounts_transactions->fill($transaction_row);
-                        $accounts_transactions->save();
-                    }
-                } elseif (! empty($accounts_transactions_id[$index])) {
-                    AccountingAccountsTransaction::where('id', $accounts_transactions_id[$index])->delete();
+                if ($creditAmount > 0 && $debitAmount > 0) {
+                    throw new \RuntimeException(__('accounting::lang.journal_line_debit_credit_exclusive'));
+                }
+
+                $transaction_row = [];
+                $transaction_row['accounting_account_id'] = $account_id;
+                if ($creditAmount > 0) {
+                    $transaction_row['amount'] = $creditAmount;
+                    $transaction_row['type'] = 'credit';
+                } else {
+                    $transaction_row['amount'] = $debitAmount;
+                    $transaction_row['type'] = 'debit';
+                }
+
+                $transaction_row = array_merge($transaction_row, $this->journalLineExtras($request, (int) $index, $business_id));
+
+                $transaction_row['created_by'] = $user_id;
+                $transaction_row['operation_date'] = $op_date;
+                $transaction_row['sub_type'] = 'journal_entry';
+                $transaction_row['acc_trans_mapping_id'] = $acc_trans_mapping->id;
+
+                if (! empty($existing_id)) {
+                    $accounts_transactions = AccountingAccountsTransaction::find($existing_id);
+                    $accounts_transactions->fill($transaction_row);
+                    $accounts_transactions->update();
+                } else {
+                    $accounts_transactions = new AccountingAccountsTransaction();
+                    $accounts_transactions->fill($transaction_row);
+                    $accounts_transactions->save();
                 }
             }
 
@@ -473,6 +502,53 @@ class JournalEntryController extends Controller
 
         return ['success' => 1,
             'msg' => __('lang_v1.deleted_success'),
+        ];
+    }
+
+    /**
+     * Per journal line: memo, contact, location. Billable/job are cleared on save.
+     *
+     * @return array<string, mixed>
+     */
+    protected function journalLineExtras(Request $request, int $index, int $business_id): array
+    {
+        $notes = $request->input('journal_line_note', []);
+        $contactIds = $request->input('journal_line_contact_id', []);
+        $lineLocs = $request->input('journal_line_location_id', []);
+
+        $note = isset($notes[$index]) ? trim((string) $notes[$index]) : '';
+        $note = $note === '' ? null : $note;
+
+        $contactId = $contactIds[$index] ?? null;
+        if ($contactId === '' || $contactId === null) {
+            $contactId = null;
+        } else {
+            $contactId = (int) $contactId;
+            if (! Contact::where('business_id', $business_id)->where('id', $contactId)->exists()) {
+                throw new \RuntimeException(__('messages.something_went_wrong'));
+            }
+        }
+
+        $lineLoc = $lineLocs[$index] ?? null;
+        $lineLoc = ($lineLoc === '' || $lineLoc === null) ? null : (int) $lineLoc;
+
+        $hasLocations = BusinessLocation::where('business_id', $business_id)->exists();
+        if ($hasLocations && $lineLoc === null) {
+            throw new \RuntimeException(__('accounting::lang.journal_line_location_required'));
+        }
+
+        if ($lineLoc !== null) {
+            if (! BusinessLocation::where('business_id', $business_id)->where('id', $lineLoc)->exists()) {
+                throw new \RuntimeException(__('messages.something_went_wrong'));
+            }
+        }
+
+        return [
+            'note' => $note,
+            'contact_id' => $contactId,
+            'billable' => false,
+            'job_name' => null,
+            'location_id' => $lineLoc,
         ];
     }
 }

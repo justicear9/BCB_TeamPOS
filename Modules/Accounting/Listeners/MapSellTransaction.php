@@ -42,20 +42,36 @@ class MapSellTransaction
                 if (! $accountingUtil->deleteMap($business_id, $event->transaction->id, null)) {
                     \Log::warning('Accounting: deleteMap skipped (period locked)', ['type' => 'sell', 'transaction_id' => $event->transaction->id]);
                 }
+                if (! $accountingUtil->deleteInventoryMap((int) $business_id, (int) $event->transaction->id)) {
+                    \Log::warning('Accounting: deleteInventoryMap skipped (period locked)', ['type' => 'sell', 'transaction_id' => $event->transaction->id]);
+                }
             } catch (\Throwable $e) {
                 \Log::error('Accounting deleteMap failed', ['type' => 'sell', 'message' => $e->getMessage()]);
             }
         } else {
+            $sessionUserId = request()->hasSession() ? request()->session()->get('user.id') : null;
             if (! is_null($deposit_to) && ! is_null($payment_account)) {
                 $type = 'sell';
                 $id = $event->transaction->id;
-                $user_id = request()->session()->get('user.id');
+                $user_id = $sessionUserId ?? $event->transaction->created_by;
                 try {
                     if (! $accountingUtil->saveMap($type, $id, $user_id, $business_id, $deposit_to, $payment_account)) {
                         \Log::warning('Accounting: saveMap skipped (period locked)', ['type' => 'sell', 'transaction_id' => $id]);
                     }
+                    if (! $accountingUtil->saveInventoryMapForSell($event->transaction, $user_id)) {
+                        \Log::warning('Accounting: saveInventoryMapForSell skipped (period locked)', ['transaction_id' => $id]);
+                    }
                 } catch (\Throwable $e) {
                     \Log::error('Accounting saveMap failed', ['type' => 'sell', 'message' => $e->getMessage()]);
+                }
+            } else {
+                try {
+                    $user_id = $sessionUserId ?? $event->transaction->created_by;
+                    if (! $accountingUtil->saveInventoryMapForSell($event->transaction, $user_id)) {
+                        \Log::warning('Accounting: saveInventoryMapForSell skipped (period locked)', ['transaction_id' => $event->transaction->id]);
+                    }
+                } catch (\Throwable $e) {
+                    \Log::error('Accounting saveInventoryMapForSell failed', ['type' => 'sell', 'message' => $e->getMessage()]);
                 }
             }
         }

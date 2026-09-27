@@ -35,8 +35,8 @@
                             <ul>
                             @foreach($accounts->where('account_sub_type_id', $sub_type->id)->sortBy('name')->all() as $account)
                                 <li @if(count($account->child_accounts) == 0) data-jstree='{ "icon" : "fas fa-arrow-alt-circle-right" }' @endif>
-                                    {{$account->name}} @if(!empty($account->gl_code))({{$account->gl_code}}) @endif 
-                                    - @format_currency($account->balance)
+                                    {{$account->name}} @if(!empty($account->gl_code))({{$account->gl_code}}) @endif
+                                    <span class="text-muted tw-pl-1">·</span> @format_currency($account->balance)
                                     @if($account->status == 'active')  
                                         <span><i class="fas fa-check text-success" title="@lang( 'accounting::lang.active' )"></i></span>
                                     @elseif($account->status == 'inactive') 
@@ -64,9 +64,9 @@
                                         <ul>
                                         @foreach($account->child_accounts as $child_account)
                                             <li data-jstree='{ "icon" : "fas fa-arrow-alt-circle-right" }'>
-                                                {{$child_account->name}} 
+                                                {{$child_account->name}}
                                                 @if(!empty($child_account->gl_code))({{$child_account->gl_code}}) @endif
-                                                 - @format_currency($child_account->balance)
+                                                <span class="text-muted tw-pl-1">·</span> @format_currency($child_account->balance)
 
                                                 @if($child_account->status == 'active') 
                                                     <span><i class="fas fa-check text-success" title="@lang( 'accounting::lang.active' )"></i></span>

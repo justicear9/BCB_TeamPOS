@@ -4,7 +4,7 @@
     "AssetManagement": true,
     "Cms": true,
     "Connector": true,
-    "Crm": true,
+    "Crm": false,
     "Ecommerce": true,
     "FieldForce": true,
     "Manufacturing": true,
@@ -21,5 +21,6 @@
     "Gym": true,
     "ZatcaIntegrationKsa": true,
     "CampaignSms": true,
+    "AIBusinessManager": true,
     "InventoryReporting": true
 }

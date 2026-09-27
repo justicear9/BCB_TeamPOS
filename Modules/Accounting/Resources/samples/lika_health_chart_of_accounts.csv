@@ -1,0 +1,55 @@
+name,gl_code,account_primary_type,account_sub_type,detail_type,parent_account,status,description,is_cash_account
+Sales-UK Goods,300,income,income,sales_of_product_income,,active,Income from any normal business activity-UK Goods,0
+Sales-Sinocare Products,301,income,income,sales_of_product_income,,active,Income from any normal business activity-Sinocare Products,0
+Sales-Famano Products,302,income,income,sales_of_product_income,,active,Income from any normal business activity-Famano Products,0
+Interest Income,303,income,other_income,interest_earned,,active,Interest income,0
+Cost of Goods Sold (COGS),400,expenses,cost_of_sale,supplies_and_materials_-_cos,,active,"Direct cost of goods purchased for resale (medicines, drugs, consumables).",0
+Freight & Clearing Charges - Imports,401,expenses,cost_of_sale,freight_and_delivery_-_cos,,active,"Freight, import duties, and clearing costs incurred on stock purchase",0
+Purchase Returns & Allowances,402,expenses,cost_of_sale,other_costs_of_sales_-_cos,,active,Returns to suppliers or discounts received post-purchase.,0
+Inventory Write-off / Adjustment,403,expenses,cost_of_sale,other_costs_of_sales_-_cos,,active,Adjustment for expired or damaged goods.,0
+Trade Discounts Allowed,500,expenses,expenses,other_selling_expenses,,active,Trade discounts offered to customers,0
+Advertising & Promotion,501,expenses,expenses,advertising/promotional,,active,"Campaigns, banners, and promotional materials.",0
+Vehicle Repairs & Maintenance,502,expenses,expenses,repair_and_maintenance,,active,Routine servicing and repairs for delivery vehicles,0
+Sales Commission,503,expenses,expenses,commissions_and_fees,,active,Commission payable to sales representatives.,0
+Delivery & Transport Costs,504,expenses,expenses,shipping_and_delivery_expense,,active,"Fuel, vehicle maintenance, and transport for deliveries",0
+Salaries & Wages,505,expenses,expenses,payroll_expenses,,active,Payroll for employees,0
+Office Utilities,506,expenses,expenses,utilities,,active,"Office or warehouse rent, electricity, water, and utilities.",0
+Office Repairs & Maintenance,507,expenses,expenses,repair_and_maintenance,,active,Maintenance and repair of office premises or equipment.,0
+Office Supplies & Stationery,508,expenses,expenses,supplies_and_materials,,active,"General office consumables like paper, pens, and forms.",0
+Telephone & Internet Expenses,509,expenses,expenses,dues_and_subscriptions,,active,Mobile and internet service costs.,0
+Insurance Expense,510,expenses,expenses,insurance,,active,"Insurance premiums (fire, warehouse, vehicle, product liability).",0
+Professional & Consultancy Fees,511,expenses,expenses,legal_and_professional_fees,,active,"Legal, audit, accounting, and consulting service fees.",0
+Bank Charges,512,expenses,expenses,bank_charges,,active,"Monthly charges, transfer fees, and cheque processing fee",0
+Licenses & Permits,513,expenses,expenses,taxes_paid,,active,Renewal of pharmaceutical and business operation licenses.,0
+Software Subscriptions & Licenses,514,expenses,expenses,dues_and_subscriptions,,active,SaaS subscriptions,0
+Depreciation Expense,515,expenses,other_expense,depreciation,,active,Depreciation on PPE assets.,0
+Amortization Expense,516,expenses,other_expense,amortisation,,active,Amortization of intangible assets.,0
+Bad Debt Expense,517,expenses,expenses,bad_debts,,active,Unrecoverable amounts from customers.,0
+Prepaid amortization expense,518,expenses,expenses,amortisation_expense,,active,monthly amortization of prepayment,0
+Lunch,519,expenses,expenses,meals_and_entertainment,,active,Office Lunch,0
+Rent Expense,520,expenses,expenses,rent_or_lease_of_buildings,,active,Office Rent,0
+Income Tax Expense,521,expenses,expenses,income_tax_expense,,active,A percentage of total earnings paid to the government.,0
+Bank,601,asset,cash_and_cash_equivalents,bank,,active,Balance per Bank account,1
+Cash on Hand,602,asset,cash_and_cash_equivalents,cash_on_hand,,active,Petty cash used for small office expenses.Undeposited customer payments,1
+Post-Dated Cheques,604,asset,current_assets,other_current_assets,,active,Cheques that has a future date written on it and cannot be deposited or cashed until that date.,0
+Accounts Receivable (Trade Debtors),605,asset,accounts_receivable,accounts_receivable,,active,Amounts due from wholesale and retail pharmacy customers.,0
+Allowance for Doubtful Debts,606,asset,current_assets,allowance_for_bad_debts,,active,Estimated provision for bad or uncollectible accounts.,0
+Prepayment,607,asset,current_assets,prepaid_expenses,,active,Any other prepayments for services such as licenses or subscriptions.,0
+Inventory,608,asset,current_assets,inventory,,active,Finished pharmaceutical products available for sale,0
+Deposits with Suppliers,609,asset,current_assets,other_current_assets,,active,Advance payments to suppliers for goods not yet delivered.,0
+Office Equipment,700,asset,fixed_assets,machinery_and_equipment,,active,"Computers, printers, and other small office electronics.",0
+Accumulated Depreciation - Office Equipment,702,asset,fixed_assets,"accumulated_depreciation_on_property,_plant_and_equipment",,active,"Depreciation accumulated on office, warehouse, or lab equipment.",0
+Furniture & Fixtures,703,asset,fixed_assets,furniture_and_fixtures,,active,"Desks, chairs, cabinets, and other furniture.",0
+Accumulated Depreciation - Furniture & Fixtures,704,asset,fixed_assets,"accumulated_depreciation_on_property,_plant_and_equipment",,active,Depreciation accumulated on furniture and fittings.,0
+Motor Vehicles,705,asset,fixed_assets,vehicles,,active,Company-owned vehicles for distribution or logistics.,0
+Accumulated Depreciation - Motor Vehicles,706,asset,fixed_assets,"accumulated_depreciation_on_property,_plant_and_equipment",,active,Total depreciation charged on company vehicles.,0
+Pharmaceutical Licenses / Permits,707,asset,non_current_assets,licences,,active,Long-term regulatory licenses required for distribution.,0
+Accumulated Amortization - Licenses & Permits,708,asset,non_current_assets,accumulated_amortisation_of_non-current_assets,,active,Total amortization charged against licenses and permits.,0
+Accounts Payable (Trade Creditors),800,liability,accounts_payable,accounts_payable_(a/p),,active,Amounts owed to suppliers for goods and services purchased on credit.,0
+Accrued Expenses,801,liability,current_liabilities,accrued_liabilities,,active,"Expenses incurred but not yet invoiced (e.g. rent, utilities).",0
+Salaries and Wages Payable,802,liability,current_liabilities,payroll_liabilities,,active,Employee earnings earned but not yet paid.,0
+Withholding Tax Payable,803,liability,current_liabilities,current_tax_liability,,active,Supplier withholding taxes to be remitted to GRA.,0
+Corporate Income Tax Payable,804,liability,current_liabilities,income_tax_payable,,active,Company tax payable for the current year.,0
+Deferred Revenue,805,liability,current_liabilities,other_current_liabilities,,active,Advance payments received for goods/services not yet delivered.,0
+Equity,900,equity,owners_equity,owner's_equity,,active,The value of Owner's capital,0
+Retained Earnings,902,equity,owners_equity,retained_earnings,,active,Retained Profit,0

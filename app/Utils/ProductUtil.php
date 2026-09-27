@@ -5,6 +5,7 @@ namespace App\Utils;
 use App\Business;
 use App\BusinessLocation;
 use App\Discount;
+use App\Events\OpeningStockCreatedOrModified;
 use App\Media;
 use App\Product;
 use App\ProductRack;
@@ -1184,6 +1185,8 @@ class ProductUtil extends Util
                         ]
               );
                     $transaction->purchase_lines()->saveMany($purchase_lines);
+
+                    event(new OpeningStockCreatedOrModified('saved', $transaction));
                 }
             }
         }
@@ -2000,6 +2003,9 @@ class ProductUtil extends Util
 
     public function getVariationStockHistory($business_id, $variation_id, $location_id)
     {
+        $stockResetNote = (string) __('inventoryreporting::lang.stock_reset_note');
+        $stockResetLabel = ucwords((string) __('inventoryreporting::lang.stock_reset'));
+
         $stock_history = Transaction::leftjoin('transaction_sell_lines as sl',
             'sl.transaction_id', '=', 'transactions.id')
                                 ->leftjoin('purchase_lines as pl',
@@ -2048,11 +2054,15 @@ class ProductUtil extends Util
         $stock = 0;
         $stock_in_second_unit = 0;
         foreach ($stock_history as $stock_line) {
+            $isStockReset = $stock_line->transaction_type === 'stock_adjustment'
+                && trim((string) $stock_line->additional_notes) !== ''
+                && trim((string) $stock_line->additional_notes) === trim($stockResetNote);
+
             $temp_array = [
                 'date' => $stock_line->transaction_date,
                 'transaction_id' => $stock_line->transaction_id,
-                'contact_name' => $stock_line->contact_name,
-                'supplier_business_name' => $stock_line->supplier_business_name,
+                'contact_name' => $isStockReset ? $stockResetLabel : $stock_line->contact_name,
+                'supplier_business_name' => $isStockReset ? null : $stock_line->supplier_business_name,
             ];
             if ($stock_line->transaction_type == 'sell') {
                 if ($stock_line->status != 'final') {
@@ -2096,6 +2106,9 @@ class ProductUtil extends Util
                     'type' => 'stock_adjustment',
                     'type_label' => __('stock_adjustment.stock_adjustment'),
                     'ref_no' => $stock_line->ref_no,
+                    // The stock reset job stores a long descriptor in additional_notes; don't show it under Ref No.
+                    'additional_notes' => $isStockReset ? null : $stock_line->additional_notes,
+                    'is_stock_reset' => $isStockReset,
                     'stock_in_second_unit' => $this->roundQuantity($stock_in_second_unit),
                 ]);
             } elseif ($stock_line->transaction_type == 'opening_stock') {

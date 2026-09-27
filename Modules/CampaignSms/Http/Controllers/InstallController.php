@@ -24,7 +24,14 @@ class InstallController extends Controller
         }
 
         if (! empty(System::getProperty($this->module_name.'_version'))) {
-            abort(404);
+            $output = [
+                'success' => false,
+                'msg' => 'Campaign SMS module is already installed',
+            ];
+
+            return redirect()
+                ->action([\App\Http\Controllers\Install\ModulesController::class, 'index'])
+                ->with('status', $output);
         }
 
         return view('campaignsms::install.index', [
@@ -40,11 +47,18 @@ class InstallController extends Controller
         }
 
         try {
-            DB::beginTransaction();
-
             if (! empty(System::getProperty($this->module_name.'_version'))) {
-                abort(404);
+                $output = [
+                    'success' => false,
+                    'msg' => 'Campaign SMS module is already installed',
+                ];
+
+                return redirect()
+                    ->action([\App\Http\Controllers\Install\ModulesController::class, 'index'])
+                    ->with('status', $output);
             }
+
+            DB::beginTransaction();
 
             config(['app.debug' => true]);
             Artisan::call('config:clear');

@@ -6,6 +6,10 @@
 /vendor
 /.idea
 /.vagrant
+.DS_Store
+LOCAL.env
+Journal.xlsx
+team05_bread.sql
 Homestead.json
 Homestead.yaml
 npm-debug.log

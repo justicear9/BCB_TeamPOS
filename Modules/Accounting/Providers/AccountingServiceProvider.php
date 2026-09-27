@@ -37,6 +37,9 @@ class AccountingServiceProvider extends ServiceProvider
 
         $this->app['events']->listen(\App\Events\ExpenseCreatedOrModified::class, 
         \Modules\Accounting\Listeners\MapExpenseTransactions::class);
+
+        $this->app['events']->listen(\App\Events\SalesReturnCreatedOrModified::class,
+        \Modules\Accounting\Listeners\MapSalesReturnTransaction::class);
     }
 
     /**
@@ -47,6 +50,12 @@ class AccountingServiceProvider extends ServiceProvider
     public function register()
     {
         $this->app->register(RouteServiceProvider::class);
+
+        $this->commands([
+            \Modules\Accounting\Console\ImportChartOfAccountsCommand::class,
+            \Modules\Accounting\Console\BackfillImportedSellAccountingCommand::class,
+            \Modules\Accounting\Console\ImportJournalEntriesCommand::class,
+        ]);
     }
 
     /**

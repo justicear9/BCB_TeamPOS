@@ -63,7 +63,7 @@
                         <td>@format_currency($a->accumulated_depreciation_posted)</td>
                         <td>@format_currency($a->totalAccumulatedDepreciation())</td>
                         <td>@format_currency($a->netBookValue())</td>
-                        <td>@format_date($a->acquisition_date)</td>
+                        <td>{{ \App\Utils\Util::bladeFormatDate($a->acquisition_date) }}</td>
                         <td>{{ $a->useful_life_months ?? '—' }}</td>
                         <td>{{ $a->is_depreciable ? __('messages.yes') : __('accounting::lang.non_depreciable') }}</td>
                         <td>

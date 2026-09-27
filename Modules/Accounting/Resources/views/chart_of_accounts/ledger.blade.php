@@ -155,8 +155,12 @@
             window.location = url;
         })
 
-        dateRangeSettings.startDate = moment().subtract(6, 'days');
-        dateRangeSettings.endDate = moment();
+        var requestedStart = '{{ request('start_date') }}';
+        var requestedEnd = '{{ request('end_date') }}';
+        if (requestedStart && requestedEnd) {
+            dateRangeSettings.startDate = moment(requestedStart, 'YYYY-MM-DD');
+            dateRangeSettings.endDate = moment(requestedEnd, 'YYYY-MM-DD');
+        }
         $('#transaction_date_range').daterangepicker(
             dateRangeSettings,
             function (start, end) {
@@ -165,6 +169,16 @@
                 ledger.ajax.reload();
             }
         );
+        if (requestedStart && requestedEnd) {
+            $('#transaction_date_range').val(
+                moment(requestedStart, 'YYYY-MM-DD').format(moment_date_format)
+                + ' ~ ' +
+                moment(requestedEnd, 'YYYY-MM-DD').format(moment_date_format)
+            );
+        } else {
+            // Keep empty to show full history until a filter is chosen.
+            $('#transaction_date_range').val('');
+        }
         
         // Account Book
         ledger = $('#ledger').DataTable({

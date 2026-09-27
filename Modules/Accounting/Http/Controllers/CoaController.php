@@ -10,6 +10,7 @@ use Illuminate\Routing\Controller;
 use Modules\Accounting\Entities\AccountingAccount;
 use Modules\Accounting\Entities\AccountingAccountsTransaction;
 use Modules\Accounting\Entities\AccountingAccountType;
+use Modules\Accounting\Services\CoaCsvImportService;
 use Modules\Accounting\Utils\AccountingUtil;
 use Yajra\DataTables\Facades\DataTables;
 use Illuminate\Support\Str;
@@ -23,8 +24,11 @@ class CoaController extends Controller
      *
      * @return void
      */
-    public function __construct(AccountingUtil $accountingUtil, ModuleUtil $moduleUtil)
-    {
+    public function __construct(
+        AccountingUtil $accountingUtil,
+        ModuleUtil $moduleUtil,
+        protected CoaCsvImportService $coaCsvImportService
+    ) {
         $this->accountingUtil = $accountingUtil;
         $this->moduleUtil = $moduleUtil;
     }
@@ -58,7 +62,9 @@ class CoaController extends Controller
                                 ->with(['child_accounts' => function ($query) use ($balance_formula) {
                                     $query->select([DB::raw("(SELECT $balance_formula from accounting_accounts_transactions AS AAT
                                         JOIN accounting_accounts AS AA ON AAT.accounting_account_id = AA.id
-                                        WHERE AAT.accounting_account_id = accounting_accounts.id) AS balance"), 'accounting_accounts.*']);
+                                        WHERE AAT.accounting_account_id = accounting_accounts.id) AS balance"), 'accounting_accounts.*'])
+                                        ->orderByRaw('(accounting_accounts.gl_code + 0) ASC')
+                                        ->orderBy('accounting_accounts.gl_code', 'asc');
                                 },
                                     'child_accounts.detail_type', 'detail_type', 'account_sub_type',
                                     'child_accounts.account_sub_type', ])
@@ -74,6 +80,9 @@ class CoaController extends Controller
             if (! empty(request()->input('status'))) {
                 $query->where('accounting_accounts.status', request()->input('status'));
             }
+
+            $query->orderByRaw('(accounting_accounts.gl_code + 0) ASC')
+                ->orderBy('accounting_accounts.gl_code', 'asc');
 
             $accounts = $query->get();
 
@@ -1371,6 +1380,124 @@ class CoaController extends Controller
         //
     }
 
+    /**
+     * Download COA import CSV template.
+     */
+    public function importTemplate()
+    {
+        $business_id = request()->session()->get('user.business_id');
+        if (! (auth()->user()->can('superadmin') ||
+            $this->moduleUtil->hasThePermissionInSubscription($business_id, 'accounting_module')) ||
+            ! (auth()->user()->can('accounting.manage_accounts'))) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $headers = [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="chart_of_accounts_import_template.csv"',
+        ];
+
+        $columns = [
+            'name',
+            'gl_code',
+            'account_primary_type',
+            'account_sub_type',
+            'detail_type',
+            'parent_account',
+            'status',
+            'description',
+            'is_cash_account',
+        ];
+
+        $sample = [
+            'Inventory Asset',
+            '1200',
+            'asset',
+            'other_current_assets',
+            'inventory',
+            '',
+            'active',
+            'Inventory account for stock value',
+            '1',
+        ];
+
+        return response()->stream(function () use ($columns, $sample) {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, $columns);
+            fputcsv($out, $sample);
+            fclose($out);
+        }, 200, $headers);
+    }
+
+    /**
+     * Import chart of accounts from CSV.
+     */
+    public function import(Request $request)
+    {
+        $business_id = $request->session()->get('user.business_id');
+        if (! (auth()->user()->can('superadmin') ||
+            $this->moduleUtil->hasThePermissionInSubscription($business_id, 'accounting_module')) ||
+            ! (auth()->user()->can('accounting.manage_accounts'))) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $request->validate([
+            'coa_csv' => 'required|file|mimes:csv,txt|max:5120',
+        ]);
+
+        $file = $request->file('coa_csv');
+        $handle = fopen($file->getRealPath(), 'r');
+        if ($handle === false) {
+            return redirect()->back()->with('status', [
+                'success' => 0,
+                'msg' => __('messages.something_went_wrong'),
+            ]);
+        }
+
+        $header = fgetcsv($handle);
+        fclose($handle);
+        if ($header === false) {
+            return redirect()->back()->with('status', [
+                'success' => 0,
+                'msg' => __('accounting::lang.coa_import_empty_file'),
+            ]);
+        }
+
+        $headerMap = $this->coaCsvImportService->normalizeImportHeader($header);
+        $required = ['name', 'account_primary_type', 'account_sub_type', 'detail_type'];
+        foreach ($required as $requiredCol) {
+            if (! array_key_exists($requiredCol, $headerMap)) {
+                return redirect()->back()->with('status', [
+                    'success' => 0,
+                    'msg' => __('accounting::lang.coa_import_missing_columns', ['columns' => implode(', ', $required)]),
+                ]);
+            }
+        }
+
+        $user_id = (int) auth()->id();
+        $result = $this->coaCsvImportService->importFile($file->getRealPath(), $business_id, $user_id);
+        $created = $result['created'];
+        $updated = $result['updated'];
+        $errors = $result['errors'];
+
+        if ($created === 0 && $updated === 0 && ! empty($errors)) {
+            return redirect()->back()->with('status', [
+                'success' => 0,
+                'msg' => __('accounting::lang.coa_import_failed').': '.implode(' | ', array_slice($errors, 0, 3)),
+            ]);
+        }
+
+        $msg = __('accounting::lang.coa_import_success', ['created' => $created, 'updated' => $updated]);
+        if (! empty($errors)) {
+            $msg .= ' '.__('accounting::lang.coa_import_partial', ['count' => count($errors)]).' '.implode(' | ', array_slice($errors, 0, 3));
+        }
+
+        return redirect()->back()->with('status', [
+            'success' => 1,
+            'msg' => $msg,
+        ]);
+    }
+
     public function activateDeactivate($id)
     {
         $business_id = request()->session()->get('user.business_id');
@@ -1431,15 +1558,31 @@ class CoaController extends Controller
             $transactions = AccountingAccountsTransaction::where('accounting_account_id', $account->id)
                             ->leftjoin('accounting_acc_trans_mappings as ATM', 'accounting_accounts_transactions.acc_trans_mapping_id', '=', 'ATM.id')
                             ->leftjoin('transactions as T', 'accounting_accounts_transactions.transaction_id', '=', 'T.id')
+                            ->leftJoin('transaction_payments as TP', 'accounting_accounts_transactions.transaction_payment_id', '=', 'TP.id')
+                            ->leftJoin('transactions as Tpay', 'TP.transaction_id', '=', 'Tpay.id')
                             ->leftjoin('users AS U', 'accounting_accounts_transactions.created_by', 'U.id')
-                            ->select('accounting_accounts_transactions.operation_date',
+                            ->select(
+                                'accounting_accounts_transactions.operation_date',
                                 'accounting_accounts_transactions.sub_type',
                                 'accounting_accounts_transactions.type',
                                 'accounting_accounts_transactions.note as aat_note',
-                                'ATM.ref_no as a_ref', 'ATM.note',
+                                'accounting_accounts_transactions.transaction_id',
+                                'accounting_accounts_transactions.acc_trans_mapping_id',
+                                'ATM.id as mapping_id',
+                                'ATM.type as mapping_type',
+                                'ATM.fixed_asset_id',
+                                'ATM.ref_no as a_ref',
+                                'ATM.note',
                                 'accounting_accounts_transactions.amount',
                                 DB::raw("CONCAT(COALESCE(U.surname, ''),' ',COALESCE(U.first_name, ''),' ',COALESCE(U.last_name,'')) as added_by"),
-                                'T.invoice_no', 'T.ref_no'
+                                DB::raw('COALESCE(T.invoice_no, Tpay.invoice_no) as invoice_no'),
+                                DB::raw('COALESCE(T.ref_no, Tpay.ref_no) as ref_no'),
+                                'T.type as source_transaction_type',
+                                'T.opening_stock_product_id as opening_stock_product_id',
+                                'TP.payment_ref_no as payment_ref_no',
+                                'TP.method as payment_method',
+                                'TP.note as payment_note',
+                                DB::raw('COALESCE(accounting_accounts_transactions.transaction_id, TP.transaction_id) as source_transaction_id')
                             );
             if (! empty($start_date) && ! empty($end_date)) {
                 $transactions->whereDate('accounting_accounts_transactions.operation_date', '>=', $start_date)
@@ -1456,38 +1599,7 @@ class CoaController extends Controller
                         return $this->accountingUtil->format_date($row->operation_date, true);
                     })
                     ->editColumn('ref_no', function ($row) {
-                        $description = '';
-
-                        if ($row->sub_type == 'journal_entry') {
-                            $description = '<b>'.__('accounting::lang.journal_entry').'</b>';
-                            $description .= '<br>'.__('purchase.ref_no').': '.$row->a_ref;
-                            $description .= '<br>'.__('lang_v1.description').': '.$row->aat_note;
-                        }
-
-                        if ($row->sub_type == 'opening_balance') {
-                            $description = '<b>'.__('accounting::lang.opening_balance').'</b>';
-                            $description .= '<br>'.__('lang_v1.description').': '.$row->aat_note;
-                        }
-
-                        if ($row->sub_type == 'sell') {
-                            $description = '<b>'.__('sale.sale').'</b>';
-                            $description .= '<br>'.__('sale.invoice_no').': '.$row->invoice_no;
-                            $description .= '<br>'.__('lang_v1.description').': '.$row->aat_note;
-                        }
-
-                        if ($row->sub_type == 'expense') {
-                            $description = '<b>'.__('accounting::lang.expense').'</b>';
-                            $description .= '<br>'.__('purchase.ref_no').': '.$row->ref_no;
-                            $description .= '<br>'.__('lang_v1.description').': '.$row->aat_note;
-                        }
-
-                        if ($row->sub_type == 'fixed_asset_depreciation') {
-                            $description = '<b>'.__('accounting::lang.fixed_asset_depreciation').'</b>';
-                            $description .= '<br>'.__('purchase.ref_no').': '.$row->a_ref;
-                            $description .= '<br>'.__('lang_v1.description').': '.$row->note;
-                        }
-
-                        return $description;
+                        return $this->accountingUtil->ledgerLineDescriptionHtml($row);
                     })
                     ->addColumn('debit', function ($row) {
                         if ($row->type == 'debit') {
@@ -1515,12 +1627,10 @@ class CoaController extends Controller
                     //     return '<span class="balance" data-orig-value="' . $bal . '">' . $this->accountingUtil->num_f($bal, true) . '</span>';
                     // })
                     ->editColumn('action', function ($row) {
-                        $action = '';
-
-                        return $action;
+                        return $this->accountingUtil->ledgerLineDocumentLinkHtml($row);
                     })
                     ->filterColumn('added_by', function ($query, $keyword) {
-                        $query->whereRaw("CONCAT(COALESCE(u.surname, ''), ' ', COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, '')) like ?", ["%{$keyword}%"]);
+                        $query->whereRaw("CONCAT(COALESCE(U.surname, ''), ' ', COALESCE(U.first_name, ''), ' ', COALESCE(U.last_name, '')) like ?", ["%{$keyword}%"]);
                     })
                     ->rawColumns(['ref_no', 'credit', 'debit', 'balance', 'action'])
                     ->make(true);

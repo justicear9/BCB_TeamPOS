@@ -5,7 +5,6 @@ use Modules\InventoryReporting\Http\Controllers\InstallController;
 use Modules\InventoryReporting\Http\Controllers\InventoryReportController;
 use Modules\InventoryReporting\Http\Controllers\LotController;
 use Modules\InventoryReporting\Http\Controllers\SettingsController;
-use Modules\InventoryReporting\Http\Controllers\SignedStockAdjustmentController;
 use Modules\InventoryReporting\Http\Controllers\StockResetController;
 
 Route::middleware(['web', 'auth', 'language', 'timezone', 'AdminSidebarMenu', 'SetSessionData'])
@@ -18,10 +17,6 @@ Route::middleware(['web', 'auth', 'language', 'timezone', 'AdminSidebarMenu', 'S
 
         Route::get('/stock-reset', [StockResetController::class, 'create'])->name('stock-reset.create');
         Route::post('/stock-reset', [StockResetController::class, 'store'])->name('stock-reset.store');
-
-        Route::get('/adjustment', [SignedStockAdjustmentController::class, 'create'])->name('adjustment.create');
-        Route::post('/adjustment', [SignedStockAdjustmentController::class, 'store'])->name('adjustment.store');
-        Route::post('/adjustment/product-row', [SignedStockAdjustmentController::class, 'getProductRow'])->name('adjustment.product-row');
 
         Route::get('/lots', [LotController::class, 'index'])->name('lots.index');
         Route::get('/lots/{id}/edit', [LotController::class, 'edit'])->name('lots.edit');

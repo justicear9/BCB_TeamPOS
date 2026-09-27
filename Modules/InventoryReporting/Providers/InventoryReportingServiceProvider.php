@@ -17,6 +17,16 @@ class InventoryReportingServiceProvider extends ServiceProvider
             \App\Events\StockAdjustmentCreatedOrModified::class,
             \Modules\InventoryReporting\Listeners\PostStockAdjustmentAccounting::class
         );
+
+        $this->app['events']->listen(
+            \App\Events\OpeningStockCreatedOrModified::class,
+            \Modules\InventoryReporting\Listeners\PostOpeningStockAccounting::class
+        );
+
+        $this->app['events']->listen(
+            \App\Events\StockTransferCreatedOrModified::class,
+            \Modules\InventoryReporting\Listeners\PostStockTransferAccounting::class
+        );
     }
 
     public function register()

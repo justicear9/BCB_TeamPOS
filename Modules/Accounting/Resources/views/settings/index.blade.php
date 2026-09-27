@@ -79,6 +79,150 @@
 							</div>
 						</div>
 
+						@php
+							$inventory_asset_account = !empty($accounting_settings['inventory_asset_account_id'])
+								? \Modules\Accounting\Entities\AccountingAccount::find($accounting_settings['inventory_asset_account_id'])
+								: null;
+							$inventory_cogs_account = !empty($accounting_settings['inventory_cogs_account_id'])
+								? \Modules\Accounting\Entities\AccountingAccount::find($accounting_settings['inventory_cogs_account_id'])
+								: null;
+							$direct_costs_account = !empty($accounting_settings['direct_costs_account_id'])
+								? \Modules\Accounting\Entities\AccountingAccount::find($accounting_settings['direct_costs_account_id'])
+								: null;
+							$inventory_adjustment_account = !empty($accounting_settings['inventory_adjustment_account_id'])
+								? \Modules\Accounting\Entities\AccountingAccount::find($accounting_settings['inventory_adjustment_account_id'])
+								: null;
+							$discount_received_account = !empty($accounting_settings['discount_received_account_id'])
+								? \Modules\Accounting\Entities\AccountingAccount::find($accounting_settings['discount_received_account_id'])
+								: null;
+							$discount_applied_account = !empty($accounting_settings['discount_applied_account_id'])
+								? \Modules\Accounting\Entities\AccountingAccount::find($accounting_settings['discount_applied_account_id'])
+								: null;
+							$sales_return_account = !empty($accounting_settings['sales_return_account_id'])
+								? \Modules\Accounting\Entities\AccountingAccount::find($accounting_settings['sales_return_account_id'])
+								: null;
+						@endphp
+						<div class="row">
+							<div class="col-md-12">
+								<h4>@lang('accounting::lang.inventory_posting_settings')</h4>
+								<p class="help-block">
+									@lang('accounting::lang.inventory_posting_settings_help')
+								</p>
+							</div>
+							<div class="col-md-6">
+								<div class="form-group">
+									{!! Form::label('inventory_asset_account_id', __('accounting::lang.inventory_asset_account') . ':' ) !!}
+									{!! Form::select(
+										'inventory_asset_account_id',
+										!is_null($inventory_asset_account) ? [$inventory_asset_account->id => $inventory_asset_account->name] : [],
+										$inventory_asset_account->id ?? null,
+										[
+											'class' => 'form-control accounts-dropdown width-100',
+											'placeholder' => __('accounting::lang.inventory_asset_account')
+										]
+									) !!}
+								</div>
+							</div>
+							<div class="col-md-6">
+								<div class="form-group">
+									{!! Form::label('inventory_cogs_account_id', __('accounting::lang.inventory_cogs_account') . ':' ) !!}
+									{!! Form::select(
+										'inventory_cogs_account_id',
+										!is_null($inventory_cogs_account) ? [$inventory_cogs_account->id => $inventory_cogs_account->name] : [],
+										$inventory_cogs_account->id ?? null,
+										[
+											'class' => 'form-control accounts-dropdown width-100',
+											'placeholder' => __('accounting::lang.inventory_cogs_account')
+										]
+									) !!}
+								</div>
+							</div>
+							<div class="col-md-6">
+								<div class="form-group">
+									{!! Form::label('direct_costs_account_id', __('accounting::lang.direct_costs_account') . ':' ) !!}
+									@show_tooltip(__('accounting::lang.direct_costs_account_help'))
+									{!! Form::select(
+										'direct_costs_account_id',
+										!is_null($direct_costs_account) ? [$direct_costs_account->id => $direct_costs_account->name] : [],
+										$direct_costs_account->id ?? null,
+										[
+											'class' => 'form-control accounts-dropdown width-100',
+											'placeholder' => __('accounting::lang.direct_costs_account')
+										]
+									) !!}
+								</div>
+							</div>
+							<div class="col-md-6">
+								<div class="form-group">
+									{!! Form::label('inventory_adjustment_account_id', __('accounting::lang.inventory_adjustment_account') . ':' ) !!}
+									@show_tooltip(__('accounting::lang.inventory_adjustment_account_help'))
+									{!! Form::select(
+										'inventory_adjustment_account_id',
+										!is_null($inventory_adjustment_account) ? [$inventory_adjustment_account->id => $inventory_adjustment_account->name] : [],
+										$inventory_adjustment_account->id ?? null,
+										[
+											'class' => 'form-control accounts-dropdown width-100',
+											'placeholder' => __('accounting::lang.inventory_adjustment_account')
+										]
+									) !!}
+								</div>
+							</div>
+						</div>
+
+						<div class="row">
+							<div class="col-md-12">
+								<h4>@lang('accounting::lang.discount_posting_settings')</h4>
+								<p class="help-block">
+									@lang('accounting::lang.discount_posting_settings_help')
+								</p>
+							</div>
+							<div class="col-md-6">
+								<div class="form-group">
+									{!! Form::label('discount_received_account_id', __('accounting::lang.discount_received_account') . ':' ) !!}
+									@show_tooltip(__('accounting::lang.discount_received_account_help'))
+									{!! Form::select(
+										'discount_received_account_id',
+										!is_null($discount_received_account) ? [$discount_received_account->id => $discount_received_account->name] : [],
+										$discount_received_account->id ?? null,
+										[
+											'class' => 'form-control accounts-dropdown width-100',
+											'placeholder' => __('accounting::lang.discount_received_account')
+										]
+									) !!}
+								</div>
+							</div>
+							<div class="col-md-6">
+								<div class="form-group">
+									{!! Form::label('discount_applied_account_id', __('accounting::lang.discount_applied_account') . ':' ) !!}
+									@show_tooltip(__('accounting::lang.discount_applied_account_help'))
+									{!! Form::select(
+										'discount_applied_account_id',
+										!is_null($discount_applied_account) ? [$discount_applied_account->id => $discount_applied_account->name] : [],
+										$discount_applied_account->id ?? null,
+										[
+											'class' => 'form-control accounts-dropdown width-100',
+											'placeholder' => __('accounting::lang.discount_applied_account')
+										]
+									) !!}
+								</div>
+							</div>
+							<div class="col-md-6">
+								<div class="form-group">
+									{!! Form::label('sales_return_account_id', __('accounting::lang.sales_return_account') . ':' ) !!}
+									@show_tooltip(__('accounting::lang.sales_return_account_help'))
+									{!! Form::select(
+										'sales_return_account_id',
+										!is_null($sales_return_account) ? [$sales_return_account->id => $sales_return_account->name] : [],
+										$sales_return_account->id ?? null,
+										[
+											'class' => 'form-control accounts-dropdown width-100',
+											'placeholder' => __('accounting::lang.sales_return_account')
+										]
+									) !!}
+								</div>
+							</div>
+						</div>
+
 						<hr />
 
 						<h3>@lang('accounting::lang.map_transactions') @show_tooltip(__('accounting::lang.map_transactions_help'))</h3>

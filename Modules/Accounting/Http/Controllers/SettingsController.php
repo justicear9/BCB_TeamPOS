@@ -140,6 +140,13 @@ class SettingsController extends Controller
                 'transfer_prefix',
                 'fixed_asset_code_prefix',
                 'accounting_default_map',
+                'inventory_asset_account_id',
+                'inventory_cogs_account_id',
+                'direct_costs_account_id',
+                'discount_received_account_id',
+                'discount_applied_account_id',
+                'inventory_adjustment_account_id',
+                'sales_return_account_id',
                 'accounting_period_lock_end',
             ]);
             if (array_key_exists('fixed_asset_code_prefix', $incoming)) {

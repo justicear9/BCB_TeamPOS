@@ -3,24 +3,21 @@
 namespace Modules\InventoryReporting\Services;
 
 use App\Events\StockAdjustmentCreatedOrModified;
-use App\Product;
 use App\PurchaseLine;
 use App\Transaction;
 use App\Utils\ProductUtil;
 use App\Utils\TransactionUtil;
-use App\Utils\Util;
 use DB;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Stock reset and signed adjustments using core Ultimate POS primitives (transactions + mapPurchaseSell).
+ * Stock reset using core Ultimate POS primitives (stock_adjustment transaction + mapPurchaseSell).
  */
 class InventoryStockMovementService
 {
     public function __construct(
         protected ProductUtil $productUtil,
         protected TransactionUtil $transactionUtil,
-        protected Util $util
     ) {}
 
     /**
@@ -190,203 +187,5 @@ class InventoryStockMovementService
         $d = DB::table('variations')->where('id', $variationId)->value('default_purchase_price');
 
         return (float) ($d ?? 0);
-    }
-
-    /**
-     * Negative qty = increase stock via opening_stock; positive qty = decrease via stock_adjustment.
-     *
-     * @return array{success: bool, msg: string, transaction_id?: int}
-     */
-    public function signedAdjustment(
-        int $businessId,
-        int $locationId,
-        int $userId,
-        string $transactionDate,
-        string $accountingMethod,
-        int $productId,
-        int $variationId,
-        float $signedQty,
-        float $unitPrice,
-        ?int $lotNoLineId,
-        string $note
-    ): array {
-        if (abs($signedQty) < 0.0001) {
-            return ['success' => false, 'msg' => __('messages.something_went_wrong')];
-        }
-
-        try {
-            return DB::transaction(function () use (
-                $businessId,
-                $locationId,
-                $userId,
-                $transactionDate,
-                $accountingMethod,
-                $productId,
-                $variationId,
-                $signedQty,
-                $unitPrice,
-                $lotNoLineId,
-                $note
-            ) {
-                if ($signedQty > 0) {
-                    return $this->createDecreaseAdjustment(
-                        $businessId,
-                        $locationId,
-                        $userId,
-                        $transactionDate,
-                        $accountingMethod,
-                        $productId,
-                        $variationId,
-                        $signedQty,
-                        $unitPrice,
-                        $lotNoLineId,
-                        $note
-                    );
-                }
-
-                $qty = abs($signedQty);
-
-                return $this->createIncreaseOpeningStock(
-                    $businessId,
-                    $locationId,
-                    $userId,
-                    $transactionDate,
-                    $productId,
-                    $variationId,
-                    $qty,
-                    $unitPrice,
-                    $note
-                );
-            });
-        } catch (\Throwable $e) {
-            Log::error('InventoryReporting adjustment: '.$e->getMessage(), ['trace' => $e->getTraceAsString()]);
-
-            return ['success' => false, 'msg' => $e->getMessage()];
-        }
-    }
-
-    /**
-     * @return array{success: bool, msg: string, transaction_id?: int}
-     */
-    protected function createDecreaseAdjustment(
-        int $businessId,
-        int $locationId,
-        int $userId,
-        string $transactionDate,
-        string $accountingMethod,
-        int $productId,
-        int $variationId,
-        float $quantity,
-        float $unitPrice,
-        ?int $lotNoLineId,
-        string $note
-    ): array {
-        $refCount = $this->productUtil->setAndGetReferenceCount('stock_adjustment');
-        $refNo = $this->productUtil->generateReferenceNumber('stock_adjustment', $refCount);
-
-        $line = [
-            'product_id' => $productId,
-            'variation_id' => $variationId,
-            'quantity' => $quantity,
-            'unit_price' => $unitPrice,
-        ];
-        if ($lotNoLineId) {
-            $line['lot_no_line_id'] = $lotNoLineId;
-        }
-
-        $this->productUtil->decreaseProductQuantity($productId, $variationId, $locationId, $quantity);
-
-        $finalTotal = $quantity * $unitPrice;
-
-        $stockAdjustment = Transaction::create([
-            'type' => 'stock_adjustment',
-            'business_id' => $businessId,
-            'created_by' => $userId,
-            'location_id' => $locationId,
-            'transaction_date' => $transactionDate,
-            'adjustment_type' => 'normal',
-            'final_total' => $finalTotal,
-            'total_amount_recovered' => 0,
-            'ref_no' => $refNo,
-            'additional_notes' => $note,
-        ]);
-        $stockAdjustment->stock_adjustment_lines()->create($line);
-
-        $business = [
-            'id' => $businessId,
-            'accounting_method' => $accountingMethod,
-            'location_id' => $locationId,
-        ];
-        $this->transactionUtil->mapPurchaseSell($business, $stockAdjustment->stock_adjustment_lines, 'stock_adjustment');
-
-        event(new StockAdjustmentCreatedOrModified($stockAdjustment, 'added'));
-
-        return [
-            'success' => true,
-            'msg' => __('inventoryreporting::lang.adjustment_success'),
-            'transaction_id' => (int) $stockAdjustment->id,
-        ];
-    }
-
-    /**
-     * @return array{success: bool, msg: string, transaction_id?: int}
-     */
-    protected function createIncreaseOpeningStock(
-        int $businessId,
-        int $locationId,
-        int $userId,
-        string $transactionDate,
-        int $productId,
-        int $variationId,
-        float $quantity,
-        float $unitPrice,
-        string $note
-    ): array {
-        $product = Product::with(['product_tax'])->findOrFail($productId);
-        $taxPercent = $product->product_tax && ! empty($product->product_tax->amount) ? $product->product_tax->amount : 0;
-        $taxId = $product->product_tax && ! empty($product->product_tax->id) ? $product->product_tax->id : null;
-        $itemTax = $this->productUtil->calc_percentage($unitPrice, $taxPercent);
-        $purchasePriceIncTax = $unitPrice + $itemTax;
-        $total = $purchasePriceIncTax * $quantity;
-
-        $purchaseLine = new PurchaseLine();
-        $purchaseLine->product_id = $productId;
-        $purchaseLine->variation_id = $variationId;
-        $purchaseLine->item_tax = $itemTax;
-        $purchaseLine->tax_id = $taxId;
-        $purchaseLine->quantity = $quantity;
-        $purchaseLine->pp_without_discount = $unitPrice;
-        $purchaseLine->purchase_price = $unitPrice;
-        $purchaseLine->purchase_price_inc_tax = $purchasePriceIncTax;
-
-        $this->productUtil->updateProductQuantity(
-            $locationId,
-            $productId,
-            $variationId,
-            $this->productUtil->num_f($quantity)
-        );
-
-        $transaction = Transaction::create([
-            'type' => 'opening_stock',
-            'opening_stock_product_id' => $productId,
-            'status' => 'received',
-            'business_id' => $businessId,
-            'transaction_date' => $transactionDate,
-            'total_before_tax' => $total,
-            'location_id' => $locationId,
-            'final_total' => $total,
-            'payment_status' => 'paid',
-            'created_by' => $userId,
-            'additional_notes' => $note,
-        ]);
-        $transaction->purchase_lines()->save($purchaseLine);
-
-        app(InventoryAccountingService::class)->postStockIncrease($transaction, $userId);
-
-        return [
-            'success' => true,
-            'msg' => __('inventoryreporting::lang.adjustment_success'),
-            'transaction_id' => (int) $transaction->id,
-        ];
     }
 }

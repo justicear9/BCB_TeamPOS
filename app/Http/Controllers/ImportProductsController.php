@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Brands;
 use App\BusinessLocation;
 use App\Category;
+use App\Events\OpeningStockCreatedOrModified;
 use App\Product;
 use App\TaxRate;
 use App\Transaction;
@@ -816,6 +817,8 @@ class ImportProductsController extends Controller
 
         //Add product location
         $this->__addProductLocation($product, $opening_stock['location_id']);
+
+        event(new OpeningStockCreatedOrModified('saved', $transaction));
     }
 
     private function __addProductLocation($product, $location_id)
@@ -897,6 +900,8 @@ class ImportProductsController extends Controller
             $transaction->total_before_tax = $total_before_tax;
             $transaction->final_total = $total_before_tax;
             $transaction->save();
+
+            event(new OpeningStockCreatedOrModified('saved', $transaction));
         }
     }
 

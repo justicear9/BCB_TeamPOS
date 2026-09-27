@@ -13,17 +13,27 @@ use Illuminate\Queue\SerializesModels;
 class StockTransferCreatedOrModified
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
+
     public $stock;
+
     public $action;
+
+    /** @var int|null Used when the sell_transfer row is already deleted (after destroy). */
+    public $deletedBusinessId;
+
+    /** @var int|null */
+    public $deletedSellTransferId;
+
     /**
-     * Create a new event instance.
-     *
+     * @param  mixed  $stock  sell_transfer Transaction, or null when firing after delete by id
      * @return void
      */
-    public function __construct($stock, $action)
+    public function __construct($stock, $action, ?int $deletedBusinessId = null, ?int $deletedSellTransferId = null)
     {
         $this->stock = $stock;
         $this->action = $action;
+        $this->deletedBusinessId = $deletedBusinessId;
+        $this->deletedSellTransferId = $deletedSellTransferId;
     }
 
     /**

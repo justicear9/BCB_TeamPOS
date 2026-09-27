@@ -1,0 +1,16 @@
+{
+    "name": "teampos/ai-business-manager",
+    "description": "Eli (Embedded Local Intelligence) — AI assistant module for TeamPOS",
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Modules\\AIBusinessManager\\Providers\\AIBusinessManagerServiceProvider"
+            ]
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\AIBusinessManager\\": ""
+        }
+    }
+}

@@ -42,6 +42,9 @@ class MapPurchaseTransaction
                 if (! $accountingUtil->deleteMap($business_id, $event->transaction->id, null)) {
                     \Log::warning('Accounting: deleteMap skipped (period locked)', ['type' => 'purchase', 'transaction_id' => $event->transaction->id]);
                 }
+                if (! $accountingUtil->deleteInventoryMap((int) $business_id, (int) $event->transaction->id)) {
+                    \Log::warning('Accounting: deleteInventoryMap skipped (period locked)', ['type' => 'purchase', 'transaction_id' => $event->transaction->id]);
+                }
             } catch (\Throwable $e) {
                 \Log::error('Accounting deleteMap failed', ['message' => $e->getMessage()]);
             }
@@ -54,8 +57,19 @@ class MapPurchaseTransaction
                     if (! $accountingUtil->saveMap($type, $id, $user_id, $business_id, $deposit_to, $payment_account)) {
                         \Log::warning('Accounting: saveMap skipped (period locked)', ['type' => 'purchase', 'transaction_id' => $id]);
                     }
+                    if (! $accountingUtil->saveInventoryMapForPurchase($event->transaction, $user_id)) {
+                        \Log::warning('Accounting: saveInventoryMapForPurchase skipped (period locked)', ['transaction_id' => $id]);
+                    }
                 } catch (\Throwable $e) {
                     \Log::error('Accounting saveMap failed', ['message' => $e->getMessage()]);
+                }
+            } else {
+                try {
+                    if (! $accountingUtil->saveInventoryMapForPurchase($event->transaction, request()->session()->get('user.id'))) {
+                        \Log::warning('Accounting: saveInventoryMapForPurchase skipped (period locked)', ['transaction_id' => $event->transaction->id]);
+                    }
+                } catch (\Throwable $e) {
+                    \Log::error('Accounting saveInventoryMapForPurchase failed', ['message' => $e->getMessage()]);
                 }
             }
         }

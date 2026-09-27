@@ -23,6 +23,9 @@ Route::middleware('web', 'SetSessionData', 'auth', 'language', 'timezone', 'Admi
         Route::get('/', [\Modules\Accounting\Http\Controllers\ReconcileController::class, 'index'])->name('accounting.bankReconciliation.index');
         Route::get('create', [\Modules\Accounting\Http\Controllers\ReconcileController::class, 'create'])->name('accounting.bankReconciliation.create');
         Route::post('/', [\Modules\Accounting\Http\Controllers\ReconcileController::class, 'store'])->name('accounting.bankReconciliation.store');
+        Route::get('gl-lines/{bank_account}', [\Modules\Accounting\Http\Controllers\ReconcileController::class, 'glLines'])->name('accounting.bankReconciliation.glLines');
+        Route::get('statement/{bank_account}/import-template', [\Modules\Accounting\Http\Controllers\ReconcileController::class, 'bankStatementImportTemplate'])->name('accounting.bankReconciliation.importTemplate');
+        Route::post('statement/{bank_account}/import', [\Modules\Accounting\Http\Controllers\ReconcileController::class, 'importBankStatement'])->name('accounting.bankReconciliation.import');
         Route::get('statement/{bank_account}', [\Modules\Accounting\Http\Controllers\ReconcileController::class, 'statement'])->name('accounting.bankReconciliation.statement');
         Route::post('statement-line', [\Modules\Accounting\Http\Controllers\ReconcileController::class, 'storeLine'])->name('accounting.bankReconciliation.storeLine');
         Route::post('reconcile-line', [\Modules\Accounting\Http\Controllers\ReconcileController::class, 'reconcileLine'])->name('accounting.bankReconciliation.reconcileLine');
@@ -48,6 +51,8 @@ Route::middleware('web', 'SetSessionData', 'auth', 'language', 'timezone', 'Admi
         'destroy' => 'accounting.fixedAssets.destroy',
     ]);
 
+    Route::get('chart-of-accounts/import-template', [\Modules\Accounting\Http\Controllers\CoaController::class, 'importTemplate'])->name('accounting.chart_of_accounts.import_template');
+    Route::post('chart-of-accounts/import', [\Modules\Accounting\Http\Controllers\CoaController::class, 'import'])->name('accounting.chart_of_accounts.import');
     Route::resource('chart-of-accounts', \Modules\Accounting\Http\Controllers\CoaController::class);
     Route::get('ledger/{id}', [\Modules\Accounting\Http\Controllers\CoaController::class, 'ledger'])->name('accounting.ledger');
     Route::get('activate-deactivate/{id}', [\Modules\Accounting\Http\Controllers\CoaController::class, 'activateDeactivate']);

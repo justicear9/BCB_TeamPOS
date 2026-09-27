@@ -22,11 +22,6 @@ class DataController extends Controller
                 'default' => false,
             ],
             [
-                'value' => 'inventoryreporting.adjust_stock',
-                'label' => __('inventoryreporting::lang.permission_adjust_stock'),
-                'default' => false,
-            ],
-            [
                 'value' => 'inventoryreporting.reports',
                 'label' => __('inventoryreporting::lang.permission_reports'),
                 'default' => false,
@@ -52,7 +47,6 @@ class DataController extends Controller
 
         $any = auth()->user()->can('inventoryreporting.stock_reset')
             || auth()->user()->can('inventoryreporting.lot_edit')
-            || auth()->user()->can('inventoryreporting.adjust_stock')
             || auth()->user()->can('inventoryreporting.reports')
             || auth()->user()->can('inventoryreporting.settings');
 
@@ -69,13 +63,6 @@ class DataController extends Controller
                             action([\Modules\InventoryReporting\Http\Controllers\StockResetController::class, 'create']),
                             __('inventoryreporting::lang.stock_reset'),
                             ['icon' => '', 'active' => request()->routeIs('inventoryreporting.stock-reset.*')]
-                        );
-                    }
-                    if (auth()->user()->can('inventoryreporting.adjust_stock')) {
-                        $sub->url(
-                            action([\Modules\InventoryReporting\Http\Controllers\SignedStockAdjustmentController::class, 'create']),
-                            __('stock_adjustment.add'),
-                            ['icon' => '', 'active' => request()->routeIs('inventoryreporting.adjustment.*')]
                         );
                     }
                     if (auth()->user()->can('inventoryreporting.lot_edit')) {

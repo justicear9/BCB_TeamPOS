@@ -1,0 +1,14 @@
+{
+    "name": "AIBusinessManager",
+    "alias": "aibusinessmanager",
+    "description": "Eli (Embedded Local Intelligence) — AI assistant grounded in your TeamPOS business data (OpenAI)",
+    "keywords": [],
+    "active": 1,
+    "order": 0,
+    "providers": [
+        "Modules\\AIBusinessManager\\Providers\\AIBusinessManagerServiceProvider"
+    ],
+    "aliases": {},
+    "files": [],
+    "requires": []
+}

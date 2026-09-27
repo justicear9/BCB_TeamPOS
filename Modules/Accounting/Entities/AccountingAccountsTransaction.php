@@ -8,9 +8,23 @@ class AccountingAccountsTransaction extends Model
 {
     protected $guarded = [];
 
+    protected $casts = [
+        'billable' => 'boolean',
+    ];
+
     public function account()
     {
         return $this->belongsTo('Modules\Accounting\Entities\AccountingAccount', 'accounting_account_id');
+    }
+
+    public function accTransMapping()
+    {
+        return $this->belongsTo(AccountingAccTransMapping::class, 'acc_trans_mapping_id');
+    }
+
+    public function contact()
+    {
+        return $this->belongsTo(\App\Contact::class, 'contact_id');
     }
 
     /**

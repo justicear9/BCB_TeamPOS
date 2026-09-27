@@ -353,13 +353,13 @@ class StockTransferController extends Controller
 
             $this->transactionUtil->activityLog($sell_transfer, 'added');
 
-            event( new StockTransferCreatedOrModified($sell_transfer, 'added'));
-
             $output = ['success' => 1,
                 'msg' => __('lang_v1.stock_transfer_added_successfully'),
             ];
 
             DB::commit();
+
+            event(new StockTransferCreatedOrModified($sell_transfer->fresh(), 'added'));
         } catch (\Exception $e) {
             DB::rollBack();
             \Log::emergency('File:'.$e->getFile().'Line:'.$e->getLine().'Message:'.$e->getMessage());
@@ -476,8 +476,6 @@ class StockTransferController extends Controller
                     }
                 }
 
-                event( new StockTransferCreatedOrModified($sell_transfer, 'deleted'));
-
                 DB::beginTransaction();
                 //Get purchase lines from transaction_sell_lines_purchase_lines and decrease quantity_sold
                 $sell_lines = $sell_transfer->sell_lines;
@@ -532,14 +530,18 @@ class StockTransferController extends Controller
                         ->delete();
                 }
 
+                $deleted_business_id = (int) $sell_transfer->business_id;
+                $deleted_sell_transfer_id = (int) $sell_transfer->id;
+
                 //Delete both transactions
                 $sell_transfer->delete();
                 $purchase_transfer->delete();
-                event( new StockTransferCreatedOrModified($sell_transfer, 'deleted'));
                 $output = ['success' => 1,
                     'msg' => __('lang_v1.stock_transfer_delete_success'),
                 ];
                 DB::commit();
+
+                event(new StockTransferCreatedOrModified(null, 'deleted', $deleted_business_id, $deleted_sell_transfer_id));
             }
         } catch (\Exception $e) {
             DB::rollBack();
@@ -790,8 +792,6 @@ class StockTransferController extends Controller
             $sell_transfer->update($input_data);
             $sell_transfer->save();
 
-            event( new StockTransferCreatedOrModified($sell_transfer, 'updated'));
-
             //Create Purchase Transfer at transfer location
             $input_data['status'] = $status == 'completed' ? 'received' : $status;
 
@@ -861,6 +861,8 @@ class StockTransferController extends Controller
             ];
 
             DB::commit();
+
+            event(new StockTransferCreatedOrModified($sell_transfer->fresh(), 'updated'));
         } catch (\Exception $e) {
             DB::rollBack();
             \Log::emergency('File:'.$e->getFile().'Line:'.$e->getLine().'Message:'.$e->getMessage());
@@ -942,6 +944,14 @@ class StockTransferController extends Controller
             $sell_transfer->save();
 
             DB::commit();
+
+            $sell_transfer = Transaction::where('business_id', $business_id)
+                ->where('id', $id)
+                ->where('type', 'sell_transfer')
+                ->first();
+            if ($sell_transfer) {
+                event(new StockTransferCreatedOrModified($sell_transfer, 'updated'));
+            }
 
             $output = ['success' => 1,
                 'msg' => __('lang_v1.updated_succesfully'),

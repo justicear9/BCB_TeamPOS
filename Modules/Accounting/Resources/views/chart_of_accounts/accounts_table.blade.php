@@ -1,4 +1,17 @@
-<table class="table table-bordered table-striped">
+@php
+    $coaGlCodeSort = function ($code) {
+        $c = trim((string) $code);
+        if ($c === '') {
+            return '999999999999';
+        }
+        if (is_numeric($c)) {
+            return str_pad((string) (float) $c, 20, '0', STR_PAD_LEFT);
+        }
+
+        return $c;
+    };
+@endphp
+<table class="table table-bordered table-striped" id="coa_tabular_accounts_table">
     <thead>
         <tr>
             <th>@lang( 'messages.action' )</th>
@@ -44,7 +57,7 @@
                     </div>
                 </td>
                 <td>{{$account->name}}</td>
-                <td>{{$account->gl_code}}</td>
+                <td data-order="{{ $coaGlCodeSort($account->gl_code) }}">{{$account->gl_code}}</td>
                 <td></td>
                 <td>@if(!empty($account->account_primary_type)){{__('accounting::lang.' . $account->account_primary_type)}}@endif</td>
                 <td>
@@ -98,7 +111,7 @@
                         </div>
                         </td>
                         <td style="padding-left:30px">{{$child_account->name}}</td>
-                        <td>{{$child_account->gl_code}}</td>
+                        <td data-order="{{ $coaGlCodeSort($child_account->gl_code) }}">{{$child_account->gl_code}}</td>
                         <td>{{$account->name}}</td>
                         <td>@if(!empty($child_account->account_primary_type)){{__('accounting::lang.' . $child_account->account_primary_type)}}@endif</td>
                         <td>

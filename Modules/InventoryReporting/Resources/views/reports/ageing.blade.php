@@ -66,7 +66,7 @@
                     </a>
                 </p>
                 <div class="table-responsive">
-                    <table class="table table-bordered table-striped">
+                    <table class="table table-bordered table-striped" id="inventory_ageing_table">
                         <thead>
                             <tr>
                                 <th>@lang('inventoryreporting::lang.export_location')</th>
@@ -87,13 +87,19 @@
                                     <td>{{ $r->location_name ?? '—' }}</td>
                                     <td>{{ $r->product_name }}</td>
                                     <td>{{ $r->sub_sku }}</td>
-                                    <td>@if(!empty($r->date_received)) {{ @format_datetime($r->date_received) }} @endif</td>
+                                    <td @if(!empty($r->date_received)) data-order="{{ $r->date_received }}" @endif>
+                                        @if(!empty($r->date_received)) {{ @format_datetime($r->date_received) }} @endif
+                                    </td>
                                     <td>{{ $r->lot_number }}</td>
-                                    <td>@if(!empty($r->exp_date)) {{ @format_date($r->exp_date) }} @endif</td>
-                                    <td>{{ @format_quantity($r->qty_sold) }}</td>
-                                    <td>{{ @format_quantity($r->qty_remaining) }}</td>
-                                    <td>{{ $r->days_in_stock }}</td>
-                                    <td>@if(!empty($r->last_sale_date)) {{ @format_datetime($r->last_sale_date) }} @else — @endif</td>
+                                    <td @if(!empty($r->exp_date)) data-order="{{ $r->exp_date }}" @endif>
+                                        @if(!empty($r->exp_date)) {{ @format_date($r->exp_date) }} @endif
+                                    </td>
+                                    <td data-order="{{ (float) $r->qty_sold }}">{{ @format_quantity($r->qty_sold) }}</td>
+                                    <td data-order="{{ (float) $r->qty_remaining }}">{{ @format_quantity($r->qty_remaining) }}</td>
+                                    <td data-order="{{ (int) $r->days_in_stock }}">{{ $r->days_in_stock }}</td>
+                                    <td @if(!empty($r->last_sale_date)) data-order="{{ $r->last_sale_date }}" @endif>
+                                        @if(!empty($r->last_sale_date)) {{ @format_datetime($r->last_sale_date) }} @else — @endif
+                                    </td>
                                 </tr>
                             @endforeach
                         </tbody>
@@ -117,6 +123,17 @@ $(document).ready(function() {
         format: datepicker_date_format,
         todayHighlight: true,
     });
+
+    if ($.fn.DataTable && $('#inventory_ageing_table').length) {
+        $('#inventory_ageing_table').DataTable({
+            paging: false,
+            searching: false,
+            info: false,
+            lengthChange: false,
+            order: [[8, 'asc']],
+            // DataTables will use `data-order` attributes when present.
+        });
+    }
 });
 </script>
 @endsection
