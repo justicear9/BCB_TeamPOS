@@ -17,6 +17,8 @@
             font-family: inherit;
             --aibm-float-hex: {{ $aibm_floating_accent_hex ?? '#3c8dbc' }};
             --aibm-float-rgb: {{ $aibm_floating_accent_rgb ?? '60, 141, 188' }};
+            --aibm-accent: {{ $aibm_floating_accent_hex ?? '#3c8dbc' }};
+            --aibm-accent-rgb: {{ $aibm_floating_accent_rgb ?? '60, 141, 188' }};
         }
 
         .aibm-float-panel {

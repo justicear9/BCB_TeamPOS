@@ -45,15 +45,24 @@
 }
 
 .aibm-assistant-bubble .aibm-chart-wrap,
-.aibm-float-bubble-ai .aibm-chart-wrap {
+.aibm-float-bubble-ai .aibm-chart-wrap,
+.aibm-chart-wrap {
     box-sizing: border-box;
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+    margin: 12px 0 16px;
+    border-radius: 16px;
+    border: 1px solid rgba(var(--aibm-accent-rgb, 60, 141, 188), 0.22);
+    background: #fff;
+    padding: 12px 10px 6px;
 }
 .aibm-grid-scroll {
     overflow-x: auto;
     margin: 12px 0 16px;
     border-radius: 14px;
-    border: 1px solid rgba(68, 48, 34, 0.1);
-    background: #fffdfb;
+    border: 1px solid rgba(var(--aibm-accent-rgb, 60, 141, 188), 0.22);
+    background: #fff;
     white-space: normal;
     word-break: normal;
 }
@@ -68,8 +77,8 @@
     word-break: normal;
 }
 .aibm-sheet th {
-    background: #2a241f;
-    color: #faf6f1;
+    background: var(--aibm-accent, #3c8dbc);
+    color: #fff;
     font-weight: 600;
     text-align: right;
     padding: 9px 10px;
@@ -82,33 +91,34 @@
     left: 0;
 }
 .aibm-sheet th:first-child {
-    background: #2a241f;
+    background: var(--aibm-accent, #3c8dbc);
 }
 .aibm-sheet td {
     text-align: right;
     padding: 8px 10px;
     white-space: nowrap;
-    border-top: 1px solid rgba(68, 48, 34, 0.06);
+    border-top: 1px solid rgba(var(--aibm-accent-rgb, 60, 141, 188), 0.1);
     background: #fff;
 }
 .aibm-sheet td:first-child {
     background: #fff;
     font-weight: 600;
-    color: #2a241f;
+    color: var(--aibm-accent, #3c8dbc);
 }
 .aibm-sheet tbody tr:nth-child(even) td {
-    background: #faf6f1;
+    background: rgba(var(--aibm-accent-rgb, 60, 141, 188), 0.06);
 }
 .aibm-sheet tbody tr:nth-child(even) td:first-child {
-    background: #faf6f1;
+    background: rgba(var(--aibm-accent-rgb, 60, 141, 188), 0.06);
 }
 .aibm-sheet tr.aibm-grid-total td {
-    background: #f3ebe3;
+    background: rgba(var(--aibm-accent-rgb, 60, 141, 188), 0.14);
     font-weight: 700;
-    border-top: 1px solid rgba(68, 48, 34, 0.16);
+    border-top: 1px solid rgba(var(--aibm-accent-rgb, 60, 141, 188), 0.28);
 }
 .aibm-sheet tr.aibm-grid-total td:first-child {
-    background: #f3ebe3;
+    background: rgba(var(--aibm-accent-rgb, 60, 141, 188), 0.14);
+    color: var(--aibm-accent, #3c8dbc);
 }
 </style>
 <script type="text/javascript">
@@ -321,6 +331,60 @@
         return out.join('');
     };
 
+    w.aibmThemeAccentHex = function () {
+        var el = document.querySelector('.aibm-theme-scope, .aibm-float-wrap');
+        var hex = el ? (window.getComputedStyle(el).getPropertyValue('--aibm-accent') || '').trim() : '';
+        return /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : '#3c8dbc';
+    };
+
+    w.aibmChartPalette = function (accent) {
+        var raw = String(accent || '').replace('#', '');
+        var r = parseInt(raw.slice(0, 2), 16) / 255;
+        var g = parseInt(raw.slice(2, 4), 16) / 255;
+        var b = parseInt(raw.slice(4, 6), 16) / 255;
+        var max = Math.max(r, g, b);
+        var min = Math.min(r, g, b);
+        var light = (max + min) / 2;
+        var sat = 0;
+        var hue = 0;
+        if (max !== min) {
+            var d = max - min;
+            sat = light > 0.5 ? d / (2 - max - min) : d / (max + min);
+            if (max === r) {
+                hue = (g - b) / d + (g < b ? 6 : 0);
+            } else if (max === g) {
+                hue = (b - r) / d + 2;
+            } else {
+                hue = (r - g) / d + 4;
+            }
+            hue /= 6;
+        }
+        function hue2rgb(p, q, t) {
+            if (t < 0) t += 1;
+            if (t > 1) t -= 1;
+            if (t < 1 / 6) return p + (q - p) * 6 * t;
+            if (t < 1 / 2) return q;
+            if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+            return p;
+        }
+        function hslHex(H, S, L) {
+            var q = L < 0.5 ? L * (1 + S) : L + S - L * S;
+            var p = 2 * L - q;
+            var parts = [H + 1 / 3, H, H - 1 / 3].map(function (t) {
+                return Math.round(hue2rgb(p, q, t) * 255).toString(16).padStart(2, '0');
+            });
+            return '#' + parts.join('');
+        }
+        var colors = [accent];
+        var useSat = Math.max(0.45, Math.min(0.72, sat || 0.55));
+        var useLight = Math.max(0.32, Math.min(0.48, light || 0.42));
+        var step;
+        for (step = 1; step < 8; step++) {
+            colors.push(hslHex((hue + step * 0.13) % 1, useSat, useLight));
+        }
+        return colors;
+    };
+
     w.aibmBuildChartConfigFromModel = function (raw) {
         if (!raw || typeof raw !== 'object') {
             return null;
@@ -370,7 +434,7 @@
         );
         var currency = typeof raw.eli_currency === 'string' ? raw.eli_currency : '';
         var horizontal = options.indexAxis === 'y';
-        var palette = ['#C4622D', '#1E6B54', '#C8963E', '#2C3E68', '#8C4A3A', '#4E6E8C', '#A35A3C', '#6E7F45'];
+        var palette = w.aibmChartPalette(w.aibmThemeAccentHex());
         function fade(hex, alpha) {
             var h = String(hex).replace('#', '');
             if (h.length !== 6) {
@@ -412,7 +476,7 @@
                         ds.fill = true;
                         ds.pointRadius = 3;
                         ds.pointHoverRadius = 6;
-                        ds.pointBackgroundColor = '#fffdfb';
+                        ds.pointBackgroundColor = '#fff';
                         ds.pointBorderColor = color;
                         ds.pointBorderWidth = 2;
                     }
@@ -429,15 +493,15 @@
             return {
                 stacked: !!stacked,
                 beginAtZero: true,
-                grid: { display: showGrid, color: 'rgba(42,36,31,0.06)', drawTicks: false },
+                grid: { display: showGrid, color: 'rgba(15, 23, 42, 0.08)', drawTicks: false },
                 border: { display: false },
                 ticks: {
-                    color: '#78716c',
+                    color: '#64748b',
                     padding: 6,
                     font: { size: 11, family: 'ui-sans-serif, system-ui, sans-serif' },
                     callback: function (value) {
                         if (horizontal ? axis === 'y' : axis === 'x') {
-                            return value;
+                            return this.getLabelForValue ? this.getLabelForValue(value) : value;
                         }
                         return compact(value);
                     },
@@ -468,7 +532,7 @@
                         usePointStyle: true,
                         pointStyle: 'circle',
                         padding: 14,
-                        color: '#3f3833',
+                        color: '#1e293b',
                         boxWidth: 8,
                         font: { size: 12, family: 'ui-sans-serif, system-ui, sans-serif' },
                     },
@@ -476,9 +540,9 @@
                 tooltip: {
                     enabled: true,
                     intersect: false,
-                    backgroundColor: '#2a241f',
-                    titleColor: '#faf6f1',
-                    bodyColor: '#faf6f1',
+                    backgroundColor: w.aibmThemeAccentHex(),
+                    titleColor: '#fff',
+                    bodyColor: '#fff',
                     padding: 10,
                     cornerRadius: 10,
                     displayColors: true,
@@ -652,8 +716,6 @@
             var jsonStr = w.aibmB64DecodeUnicode(b64);
             var wrap = document.createElement('div');
             wrap.className = 'aibm-chart-wrap';
-            wrap.style.cssText =
-                'position:relative;width:100%;max-width:100%;margin:12px 0 16px;border-radius:16px;border:1px solid rgba(68,48,34,0.1);background:linear-gradient(180deg,#fffdfb 0%,#fff 70%);padding:12px 10px 6px;box-sizing:border-box;box-shadow:0 12px 28px rgba(42,36,31,0.06);';
             var err =
                 '<div style="padding:12px;font-size:12px;color:#b91c1c;">Invalid or unparsable chart.</div>';
             try {
