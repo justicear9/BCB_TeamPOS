@@ -1,0 +1,16 @@
+{
+    "name": "tabwins/cashier",
+    "description": "Offline cashier sync for TeamPOS",
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Modules\\Cashier\\Providers\\CashierServiceProvider"
+            ]
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\Cashier\\": ""
+        }
+    }
+}

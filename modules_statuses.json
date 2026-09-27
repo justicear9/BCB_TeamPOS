@@ -22,5 +22,6 @@
     "ZatcaIntegrationKsa": true,
     "CampaignSms": true,
     "AIBusinessManager": true,
-    "InventoryReporting": true
+    "InventoryReporting": true,
+    "Cashier": true
 }

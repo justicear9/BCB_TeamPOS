@@ -1,0 +1,14 @@
+{
+    "name": "Cashier",
+    "alias": "cashier",
+    "description": "Offline cashier sync for the mobile register",
+    "keywords": [],
+    "active": 1,
+    "order": 0,
+    "providers": [
+        "Modules\\Cashier\\Providers\\CashierServiceProvider"
+    ],
+    "aliases": {},
+    "files": [],
+    "requires": []
+}
