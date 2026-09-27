@@ -12,6 +12,7 @@ use Modules\AIBusinessManager\Services\Concerns\BakeryPlanningTools;
 use Modules\AIBusinessManager\Services\Concerns\ContactAndCatalogTools;
 use Modules\AIBusinessManager\Services\Concerns\ExtendedBusinessDataTools;
 use Modules\AIBusinessManager\Services\Concerns\InventoryIntelligenceTools;
+use Modules\AIBusinessManager\Services\Concerns\LocationSalesMatrixTools;
 use Modules\AIBusinessManager\Services\Concerns\ReportAlignedTools;
 use Modules\AIBusinessManager\Services\Concerns\TransactionAndAnalyticsTools;
 
@@ -23,6 +24,7 @@ class BusinessDataToolService
     use ContactAndCatalogTools;
     use ExtendedBusinessDataTools;
     use InventoryIntelligenceTools;
+    use LocationSalesMatrixTools;
     use ReportAlignedTools;
     use TransactionAndAnalyticsTools;
 
@@ -110,7 +112,7 @@ class BusinessDataToolService
                 'type' => 'function',
                 'function' => [
                     'name' => 'revenue_by_location',
-                    'description' => 'Per location: revenue, invoice count, and quantity_selling_uom (net qty summed in each line\'s invoice unit, TeamPOS-style).',
+                    'description' => 'One total per location for the whole date range: revenue, invoice count, and quantity. For month-by-month revenue at each location, use sales_by_location_month instead.',
                     'parameters' => [
                         'type' => 'object',
                         'properties' => [
@@ -118,6 +120,41 @@ class BusinessDataToolService
                             'end_date' => ['type' => 'string'],
                         ],
                         'required' => ['start_date', 'end_date'],
+                    ],
+                ],
+            ],
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'sales_by_location_month',
+                    'description' => 'Month-by-month invoice revenue for every visible location (revenue center). Rows already include months with 0. Omit start_date and end_date for 1 January through today in the business timezone. Present as a table: locations down, months across, then Total.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'start_date' => ['type' => 'string', 'description' => 'YYYY-MM-DD. Defaults to 1 January of the current year.'],
+                            'end_date' => ['type' => 'string', 'description' => 'YYYY-MM-DD. Defaults to today in the business timezone.'],
+                            'location_id' => ['type' => 'integer'],
+                        ],
+                        'required' => [],
+                    ],
+                ],
+            ],
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'sales_by_product_location',
+                    'description' => 'Product sales split by location for the date range. Each row has revenue_by_location and quantity_by_location. Omit dates for 1 January through today. Set by_month true only when the merchant wants each product split by month as well. Optional name_query filters one product name.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'start_date' => ['type' => 'string'],
+                            'end_date' => ['type' => 'string'],
+                            'location_id' => ['type' => 'integer'],
+                            'name_query' => ['type' => 'string'],
+                            'by_month' => ['type' => 'boolean'],
+                            'limit' => ['type' => 'integer', 'description' => 'Max products. Default 25, or 15 when by_month is true.'],
+                        ],
+                        'required' => [],
                     ],
                 ],
             ],
@@ -866,6 +903,8 @@ class BusinessDataToolService
             'product_sales_trend' => json_encode($this->productSalesTrend($args, $businessId, $user)),
             'top_categories' => json_encode($this->topCategories($args, $businessId, $user)),
             'revenue_by_location' => json_encode($this->revenueByLocation($args, $businessId, $user)),
+            'sales_by_location_month' => json_encode($this->salesByLocationMonth($args, $businessId, $user)),
+            'sales_by_product_location' => json_encode($this->salesByProductLocation($args, $businessId, $user)),
             'purchase_aggregate' => json_encode($this->purchaseAggregate($args, $businessId, $user)),
             'expense_aggregate' => json_encode($this->expenseAggregate($args, $businessId, $user)),
             'top_customers' => json_encode($this->topCustomers($args, $businessId, $user)),
