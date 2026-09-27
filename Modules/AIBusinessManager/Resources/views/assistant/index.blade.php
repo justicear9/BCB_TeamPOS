@@ -18,17 +18,17 @@
         style="--aibm-accent: {{ $theme_accent['hex'] }}; --aibm-accent-rgb: {{ $theme_accent['rgb'] }};"
     >
         <style>
-            .aibm-theme-scope .aibm-grid {
+            .aibm-theme-scope #aibm-grid {
                 display: grid;
                 grid-template-columns: minmax(0, 1fr) 320px;
                 gap: 14px;
                 align-items: start;
             }
-            .aibm-theme-scope .aibm-grid.context-collapsed {
+            .aibm-theme-scope #aibm-grid.context-collapsed {
                 grid-template-columns: minmax(0, 1fr);
                 gap: 0;
             }
-            .aibm-theme-scope .aibm-grid.context-collapsed #aibm-context-panel {
+            .aibm-theme-scope #aibm-grid.context-collapsed #aibm-context-panel {
                 display: none !important;
             }
             .aibm-theme-scope #aibm-context-reveal {
@@ -41,7 +41,7 @@
                 color: var(--aibm-accent);
                 font-weight: 600;
             }
-            .aibm-theme-scope .aibm-grid.context-collapsed #aibm-context-reveal {
+            .aibm-theme-scope #aibm-grid.context-collapsed #aibm-context-reveal {
                 display: inline-flex;
                 align-items: center;
                 gap: 6px;
@@ -216,7 +216,7 @@
         var wrap = document.createElement('div');
         wrap.style.marginBottom = '12px';
         wrap.innerHTML = '<div style="font-size:11px;color:#888;margin-bottom:4px;">' + window.aibmEscapeHtml(eliName) + '</div>' +
-            '<div class="aibm-assistant-bubble" style="white-space:pre-wrap;padding:10px;border-radius:8px;">' + window.aibmFormatAssistantText(text) + '</div>';
+            '<div class="aibm-assistant-bubble" style="white-space:normal;padding:10px;border-radius:8px;">' + window.aibmFormatAssistantText(text) + '</div>';
         logEl.appendChild(wrap);
         logEl.scrollTop = logEl.scrollHeight;
         if (window.aibmFinalizeRichContent) {

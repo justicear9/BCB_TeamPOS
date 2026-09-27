@@ -54,15 +54,20 @@
     border-radius: 14px;
     border: 1px solid rgba(68, 48, 34, 0.1);
     background: #fffdfb;
+    white-space: normal;
+    word-break: normal;
 }
-.aibm-grid {
+.aibm-sheet {
+    display: table;
     width: 100%;
     border-collapse: collapse;
     font-size: 12.5px;
     line-height: 1.35;
     font-variant-numeric: tabular-nums;
+    white-space: normal;
+    word-break: normal;
 }
-.aibm-grid th {
+.aibm-sheet th {
     background: #2a241f;
     color: #faf6f1;
     font-weight: 600;
@@ -70,39 +75,39 @@
     padding: 9px 10px;
     white-space: nowrap;
 }
-.aibm-grid th:first-child,
-.aibm-grid td:first-child {
+.aibm-sheet th:first-child,
+.aibm-sheet td:first-child {
     text-align: left;
     position: sticky;
     left: 0;
 }
-.aibm-grid th:first-child {
+.aibm-sheet th:first-child {
     background: #2a241f;
 }
-.aibm-grid td {
+.aibm-sheet td {
     text-align: right;
     padding: 8px 10px;
     white-space: nowrap;
     border-top: 1px solid rgba(68, 48, 34, 0.06);
     background: #fff;
 }
-.aibm-grid td:first-child {
+.aibm-sheet td:first-child {
     background: #fff;
     font-weight: 600;
     color: #2a241f;
 }
-.aibm-grid tbody tr:nth-child(even) td {
+.aibm-sheet tbody tr:nth-child(even) td {
     background: #faf6f1;
 }
-.aibm-grid tbody tr:nth-child(even) td:first-child {
+.aibm-sheet tbody tr:nth-child(even) td:first-child {
     background: #faf6f1;
 }
-.aibm-grid tr.aibm-grid-total td {
+.aibm-sheet tr.aibm-grid-total td {
     background: #f3ebe3;
     font-weight: 700;
     border-top: 1px solid rgba(68, 48, 34, 0.16);
 }
-.aibm-grid tr.aibm-grid-total td:first-child {
+.aibm-sheet tr.aibm-grid-total td:first-child {
     background: #f3ebe3;
 }
 </style>
@@ -172,7 +177,7 @@
         }
 
         function renderTable(header, body) {
-            var out = '<div class="aibm-grid-scroll"><table class="aibm-grid"><thead><tr>';
+            var out = '<div class="aibm-grid-scroll"><table class="aibm-sheet"><thead><tr>';
             header.forEach(function (cell) {
                 out += '<th>' + inlineFormat(cell) + '</th>';
             });
@@ -763,7 +768,7 @@
             });
         }
 
-        if (/```(mermaid|aibm-chart)/i.test(plainText)) {
+        if (/```(mermaid|aibm-chart)/i.test(plainText) || /(^|\n)\|[^\n]+\|\s*\n\|[\s:|-]+\|/m.test(plainText)) {
             revealHtmlAndCharts();
             return;
         }
