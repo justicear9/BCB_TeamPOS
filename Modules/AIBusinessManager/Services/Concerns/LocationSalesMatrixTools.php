@@ -98,18 +98,21 @@ trait LocationSalesMatrixTools
 
         usort($rows, fn ($a, $b) => $b['total_revenue'] <=> $a['total_revenue']);
 
-        return [
+        $result = [
             'ok' => true,
             'currency_symbol' => $symbol,
             'start' => $start->toDateString(),
             'end' => $end->toDateString(),
             'months' => $months,
             'period_note' => $this->partialMonthNote($start, $end),
-            'note' => 'Invoice revenue (final_total) by location and calendar month. Present rows as a table: locations down the side, months across in the given order, then a Total column. Keep months that are 0. totals_by_month is the bottom row. Do not reorder months.',
+            'note' => 'Invoice revenue (final_total) by location and calendar month. Do not draw a table or chart; the app attaches verbatim_block unchanged. Comment on the pattern only.',
             'rows' => $rows,
             'totals_by_month' => $totalsByMonth,
             'grand_total' => round($grand, $precision),
         ];
+        $result['verbatim_block'] = $this->locationMonthVerbatim($result, $precision);
+
+        return $result;
     }
 
     /**
@@ -288,7 +291,7 @@ trait LocationSalesMatrixTools
 
         usort($rows, fn ($a, $b) => $b['total_revenue'] <=> $a['total_revenue']);
 
-        return [
+        $result = [
             'ok' => true,
             'currency_symbol' => $symbol,
             'start' => $start->toDateString(),
@@ -299,11 +302,16 @@ trait LocationSalesMatrixTools
             'period_note' => $this->partialMonthNote($start, $end),
             'truncated' => $productCount > count($rows),
             'products_in_range' => $productCount,
-            'note' => 'Revenue is sell-line value (quantity × unit price including tax), so it can differ from invoice final_total when an invoice has a discount. Present a table with products as rows and locations as columns, using revenue_by_location, plus a Total column. Quote quantity_by_location with the unit when they ask how many. Do not add different units together. When by_month is true, each product has a locations list with revenue_by_month.',
+            'note' => 'Revenue is sell-line value, so it can differ from invoice totals when an invoice has a discount. Do not draw a table or chart; the app attaches verbatim_block unchanged. Comment on the pattern only.',
             'rows' => $rows,
             'totals_by_location' => $totalsByLocation,
             'grand_total' => round(array_sum($totalsByLocation), $precision),
         ];
+        if (! $byMonth) {
+            $result['verbatim_block'] = $this->productLocationVerbatim($result, $precision);
+        }
+
+        return $result;
     }
 
     /**
@@ -403,5 +411,140 @@ trait LocationSalesMatrixTools
         uksort($totals, fn ($a, $b) => $totals[$b] <=> $totals[$a]);
 
         return array_keys($totals);
+    }
+
+    /**
+     * @param  array<string, mixed>  $result
+     */
+    protected function locationMonthVerbatim(array $result, int $precision): string
+    {
+        $symbol = (string) ($result['currency_symbol'] ?? '');
+        $months = $result['months'];
+        $header = array_merge(['Location'], array_column($months, 'label'), ['Total']);
+        $body = [];
+        foreach ($result['rows'] as $row) {
+            $cells = [$row['location_name']];
+            foreach ($months as $month) {
+                $cells[] = $this->moneyLabel((float) ($row['revenue_by_month'][$month['key']] ?? 0), $precision, $symbol);
+            }
+            $cells[] = $this->moneyLabel((float) $row['total_revenue'], $precision, $symbol);
+            $body[] = $cells;
+        }
+        $totalCells = ['**Total**'];
+        foreach ($months as $month) {
+            $totalCells[] = '**'.$this->moneyLabel((float) ($result['totals_by_month'][$month['key']] ?? 0), $precision, $symbol).'**';
+        }
+        $totalCells[] = '**'.$this->moneyLabel((float) $result['grand_total'], $precision, $symbol).'**';
+        $body[] = $totalCells;
+
+        $chartRows = [];
+        foreach ($result['rows'] as $row) {
+            $data = [];
+            foreach ($months as $month) {
+                $data[] = round((float) ($row['revenue_by_month'][$month['key']] ?? 0), $precision);
+            }
+            $chartRows[] = ['label' => $row['location_name'], 'data' => $data];
+        }
+
+        return $this->markdownTable($header, $body)."\n\n".$this->chartFence([
+            'type' => 'bar',
+            'eli_height' => 340,
+            'eli_currency' => $symbol,
+            'eli_style' => 'editorial',
+            'data' => [
+                'labels' => array_column($months, 'label'),
+                'datasets' => array_map(fn ($row) => [
+                    'label' => $row['label'],
+                    'data' => $row['data'],
+                ], $chartRows),
+            ],
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $result
+     */
+    protected function productLocationVerbatim(array $result, int $precision): string
+    {
+        $symbol = (string) ($result['currency_symbol'] ?? '');
+        $locations = $result['locations'];
+        $header = array_merge(['Product'], $locations, ['Total']);
+        $body = [];
+        foreach ($result['rows'] as $row) {
+            $cells = [$row['product_name']];
+            foreach ($locations as $name) {
+                $cells[] = $this->moneyLabel((float) ($row['revenue_by_location'][$name] ?? 0), $precision, $symbol);
+            }
+            $cells[] = $this->moneyLabel((float) $row['total_revenue'], $precision, $symbol);
+            $body[] = $cells;
+        }
+        $totalCells = ['**Total**'];
+        foreach ($locations as $name) {
+            $totalCells[] = '**'.$this->moneyLabel((float) ($result['totals_by_location'][$name] ?? 0), $precision, $symbol).'**';
+        }
+        $totalCells[] = '**'.$this->moneyLabel((float) $result['grand_total'], $precision, $symbol).'**';
+        $body[] = $totalCells;
+
+        $chartRows = array_slice($result['rows'], 0, 8);
+        $datasets = [];
+        foreach ($locations as $name) {
+            $datasets[] = [
+                'label' => $name,
+                'data' => array_map(
+                    fn ($row) => round((float) ($row['revenue_by_location'][$name] ?? 0), $precision),
+                    $chartRows
+                ),
+            ];
+        }
+
+        return $this->markdownTable($header, $body)."\n\n".$this->chartFence([
+            'type' => 'bar',
+            'eli_height' => 420,
+            'eli_currency' => $symbol,
+            'eli_style' => 'editorial',
+            'options' => [
+                'indexAxis' => 'y',
+                'scales' => [
+                    'x' => ['stacked' => true],
+                    'y' => ['stacked' => true],
+                ],
+            ],
+            'data' => [
+                'labels' => array_map(fn ($row) => $row['product_name'], $chartRows),
+                'datasets' => $datasets,
+            ],
+        ]);
+    }
+
+    /**
+     * @param  list<string>  $header
+     * @param  list<list<string>>  $body
+     */
+    protected function markdownTable(array $header, array $body): string
+    {
+        $line = fn (array $cells) => '| '.implode(' | ', $cells).' |';
+        $sep = '| '.implode(' | ', array_fill(0, count($header), '---')).' |';
+        $lines = [$line($header), $sep];
+        foreach ($body as $row) {
+            $lines[] = $line($row);
+        }
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * @param  array<string, mixed>  $chart
+     */
+    protected function chartFence(array $chart): string
+    {
+        return "```aibm-chart\n".json_encode($chart, JSON_UNESCAPED_UNICODE)."\n```";
+    }
+
+    protected function moneyLabel(float $amount, int $precision, string $symbol): string
+    {
+        $rounded = round($amount, $precision);
+        $decimals = abs($rounded - round($rounded)) < 0.0000001 ? 0 : $precision;
+
+        return $symbol.number_format($rounded, $decimals);
     }
 }

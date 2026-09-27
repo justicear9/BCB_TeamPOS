@@ -50,6 +50,7 @@ class AiBusinessAssistantService
         $model = config('aibusinessmanager.model', 'gpt-4o-mini');
         $max_tokens = (int) config('aibusinessmanager.max_output_tokens', 2048);
         $max_rounds = max(1, (int) config('aibusinessmanager.max_tool_rounds', 14));
+        $grids = [];
 
         $preamble = $this->context_builder->buildToolPreamble($business_id, $user, $report_page_context);
 
@@ -100,8 +101,8 @@ Behavior:
 - For **one product’s sales over time** (trend, chart, “how is X selling”): call `product_sales_trend` with `name_query` (substring of catalog name or SKU) or `product_id`, plus `granularity` `day` (≤200-day span), `week`, or `month`. If the tool returns `ambiguous`, ask the merchant to pick a `product_id` from `matches` and call again. Empty `rows` with a resolved product means **no finalized sell lines** in that date range (or no access), not a missing tool.
 - Combine results with clear Markdown (short headings, bullets). Keep answers concise unless the user asks for depth.
 - **Weekday ranking**: when the merchant asks which day sells the most, or for a ranking of days, call `sales_by_weekday` and list `rows` in `rank` order using `day_name` exactly. Do not reorder those rows, and do not decide the winning day from the busiest evening hour. `busiest_hour` only says when that day peaks. If you also mention busy hours, they must not change the revenue ranking. The listed revenues must add up to `total_revenue`.
-- **Location by month**: when the merchant asks for month-on-month sales, sales by revenue center, or how each shop did from January to date, call `sales_by_location_month` and omit dates unless they named a range. Render a Markdown table: one row per location, columns are `months` in order using `label`, then Total. Fill cells from `revenue_by_month` (keyed by `key`). Add a total row from `totals_by_month` and `grand_total`. Do not drop a zero month. Do not reorder months. Mention `period_note` when the last month is incomplete.
-- **Product by location**: when they ask how products sold at each shop, call `sales_by_product_location`. Render a Markdown table: products as rows, `locations` as columns, cells from `revenue_by_location`, plus Total. Use `quantity_by_location` and `unit` when they ask how many. Set `by_month` only if they also want that product split month by month. Line revenue can differ from the location invoice total when an invoice has a discount.
+- **Location by month**: when the merchant asks for month-on-month sales, sales by revenue center, or how each shop did from January to date, call `sales_by_location_month` and omit dates unless they named a range. Do **not** write a markdown table and do **not** write an `aibm-chart`. Write a short reading of the pattern only (which shop leads, where a month jumped, which shop was quiet). The app attaches the official table and chart from the tool, with the exact figures.
+- **Product by location**: when they ask how products sold at each shop, call `sales_by_product_location`. Do **not** write a markdown table or chart for that tool either. Comment on where each product actually sells. Set `by_month` only if they also want that product split month by month.
 - **Mixed units**: when `quantity_units_mixed` is true, quote `quantity_by_unit`. Do not add quantities that use different units. When `quantity_product_count` is greater than 1, the quantity total mixes products (loaves and rolls can share one unit). Do not describe that total as one product.
 - **What to bake / what is left**: use `bake_plan` for a production suggestion and `stock_days_of_cover` for how long on-hand lasts versus that weekday’s sales. `suggested_bake` is a guide from past sales, not a confirmed order. Use `recipe_unit_cost` for cost per yield unit and say it uses default purchase prices plus the recipe production cost.
 - **Holidays and campus**: use the PUBLIC HOLIDAYS block when it is present. Do not invent holiday dates or campus term dates that are not listed.
@@ -178,6 +179,12 @@ REPORT_RULE;
                         $args = (string) ($tc['function']['arguments'] ?? '{}');
                     }
                     $out = $this->tools->execute($fn, $args, $business_id, $user);
+                    $decoded = json_decode($out, true);
+                    if (is_array($decoded) && isset($decoded['verbatim_block']) && is_string($decoded['verbatim_block']) && $decoded['verbatim_block'] !== '') {
+                        $grids[] = $decoded['verbatim_block'];
+                        unset($decoded['verbatim_block']);
+                        $out = json_encode($decoded);
+                    }
                     $messages[] = [
                         'role' => 'tool',
                         'tool_call_id' => $id,
@@ -193,10 +200,28 @@ REPORT_RULE;
                 return ['reply' => trans('aibusinessmanager::lang.error_generic')];
             }
 
-            return ['reply' => $text];
+            return ['reply' => $this->attachOfficialGrids($text, $grids)];
         }
 
         return ['error' => 'generic', 'details' => 'Tool round limit exceeded'];
+    }
+
+    /**
+     * Drop any table or chart the model drew and attach the tool's official grid.
+     *
+     * @param  list<string>  $grids
+     */
+    protected function attachOfficialGrids(string $text, array $grids): string
+    {
+        if ($grids === []) {
+            return $text;
+        }
+
+        $text = preg_replace('/```aibm-chart\s*\r?\n[\s\S]*?```/i', '', $text) ?? $text;
+        $text = preg_replace('/(?:^|\n)(?:\|[^\n]*\|[ \t]*(?:\n|$)){2,}/', "\n", $text) ?? $text;
+        $text = trim($text);
+
+        return ($text !== '' ? $text."\n\n" : '').implode("\n\n", $grids);
     }
 
     /**
