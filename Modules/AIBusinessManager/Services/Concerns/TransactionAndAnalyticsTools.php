@@ -298,6 +298,17 @@ trait TransactionAndAnalyticsTools
             ->selectRaw('SUM('.$this->qtySellingUomSql().') as quantity_selling_uom')
             ->pluck('quantity_selling_uom', 'day_of_week');
 
+        $unitExpr = 'COALESCE(NULLIF(TRIM(sell_unit.short_name), ""), NULLIF(TRIM(base_u.short_name), ""), "unit")';
+        $qtyByDayUnit = $this->sellLinesInRangeQuery($businessId, $location_ids, $start, $end)
+            ->join('products as p_u', 'p_u.id', '=', 'tsl.product_id')
+            ->leftJoin('units as base_u', 'base_u.id', '=', 'p_u.unit_id')
+            ->groupBy(DB::raw('DAYOFWEEK(t.transaction_date)'), DB::raw($unitExpr))
+            ->selectRaw('DAYOFWEEK(t.transaction_date) as day_of_week')
+            ->selectRaw($unitExpr.' as unit')
+            ->selectRaw('SUM('.$this->qtySellingUomSql().') as quantity')
+            ->get()
+            ->groupBy(fn ($row) => (int) $row->day_of_week);
+
         $peakHours = DB::table('transactions as t')
             ->where('t.business_id', $businessId)
             ->where('t.type', 'sell')
@@ -321,8 +332,16 @@ trait TransactionAndAnalyticsTools
 
         $rows = [];
         $rank = 1;
+        $mixed = false;
         foreach ($totals as $r) {
             $revenue = round((float) $r->revenue, $precision);
+            $dayUnits = collect($qtyByDayUnit[(int) $r->day_of_week] ?? [])->map(fn ($u) => [
+                'unit' => (string) $u->unit,
+                'quantity' => $this->roundQuantity((float) $u->quantity),
+            ])->values()->all();
+            if (count($dayUnits) > 1) {
+                $mixed = true;
+            }
             $rows[] = [
                 'rank' => $rank,
                 'day_name' => (string) $r->day_name,
@@ -330,6 +349,7 @@ trait TransactionAndAnalyticsTools
                 'revenue' => $revenue,
                 'invoices' => (int) $r->invoices,
                 'quantity_selling_uom' => $this->roundQuantity((float) ($qtyByDay[(int) $r->day_of_week] ?? 0)),
+                'quantity_by_unit' => $dayUnits,
                 'share_of_revenue' => $totalRevenue > 0 ? round($revenue / $totalRevenue, 4) : 0.0,
                 'busiest_hour' => $peakHours[(int) $r->day_of_week] ?? null,
             ];
@@ -343,7 +363,8 @@ trait TransactionAndAnalyticsTools
             'end' => $end->toDateTimeString(),
             'total_revenue' => round($totalRevenue, $precision),
             'total_invoices' => $totalInvoices,
-            'note' => 'rows are already ranked by revenue, highest first. day_name is from the database. Present this order. busiest_hour is the clock hour with the most revenue on that weekday (0–23) and must not change the rank.',
+            'quantity_units_mixed' => $mixed,
+            'note' => 'rows are already ranked by revenue, highest first. day_name is from the database. Present this order. busiest_hour is the clock hour with the most revenue on that weekday (0–23) and must not change the rank. When quantity_units_mixed is true, quote quantity_by_unit and do not add those quantities together.',
             'rows' => $rows,
         ];
     }

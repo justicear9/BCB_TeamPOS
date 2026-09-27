@@ -9,6 +9,7 @@ use Carbon\Carbon;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Modules\AIBusinessManager\Support\GhanaPublicHolidays;
 
 class BusinessInsightContextService
 {
@@ -68,6 +69,8 @@ class BusinessInsightContextService
             ]);
             $lines[] = '- '.implode(' | ', $parts);
         }
+
+        $this->appendCalendarContext($business, $locations, $lines);
 
         $bounds = (clone $txn_base)->selectRaw('MIN(transaction_date) as first_dt, MAX(transaction_date) as last_dt')->first();
         $lines[] = '';
@@ -286,6 +289,8 @@ class BusinessInsightContextService
             $lines[] = '- '.implode(' | ', $parts);
         }
 
+        $this->appendCalendarContext($business, $locations, $lines);
+
         $bounds = (clone $txn_base)->selectRaw('MIN(transaction_date) as first_dt, MAX(transaction_date) as last_dt')->first();
         $lines[] = '';
         $lines[] = '=== SALES DATA COVERAGE (final sell invoices, user-visible locations) ===';
@@ -342,6 +347,50 @@ class BusinessInsightContextService
         if ($notes !== '') {
             $lines[] = 'Additional instructions / context (merchant-provided):';
             $lines[] = $notes;
+        }
+    }
+
+    /**
+     * Ghana public holidays when the business is in Ghana, plus a warning
+     * when a location name looks like a campus outlet whose term dates are not stored.
+     *
+     * @param  \Illuminate\Support\Collection<int, mixed>  $locations
+     * @param  array<int, string>  $lines
+     */
+    protected function appendCalendarContext(Business $business, $locations, array &$lines): void
+    {
+        $country = null;
+        $campusNames = [];
+        foreach ($locations as $loc) {
+            $locCountry = trim((string) ($loc->country ?? ''));
+            if ($country === null && preg_match('/ghana/i', $locCountry) === 1) {
+                $country = $locCountry;
+            }
+            $name = trim((string) ($loc->name ?? ''));
+            if ($name !== '' && preg_match('/upsa|hostel|campus/i', $name) === 1) {
+                $campusNames[] = $name;
+            }
+        }
+
+        if (GhanaPublicHolidays::applies((string) $business->time_zone, $country)) {
+            $tz = $business->time_zone ?: 'Africa/Accra';
+            $holidays = GhanaPublicHolidays::around(Carbon::now($tz));
+            $lines[] = '';
+            $lines[] = '=== PUBLIC HOLIDAYS (Ghana) ===';
+            if ($holidays === []) {
+                $lines[] = 'No listed public holiday in the last 14 days or the next 120 days.';
+            }
+            foreach ($holidays as $holiday) {
+                $lines[] = '- '.$holiday['date'].' '.$holiday['name'].' ('.$holiday['when'].')';
+            }
+            $lines[] = GhanaPublicHolidays::caveat();
+        }
+
+        if ($campusNames !== []) {
+            $lines[] = '';
+            $lines[] = '=== CAMPUS / HOSTEL OUTLET ===';
+            $lines[] = 'Location names that look like a campus or hostel: '.implode(', ', $campusNames).'.';
+            $lines[] = 'Academic term dates are not stored in TeamPOS. Do not invent semester, exam, or vacation dates. Say campus sales can fall when students are away, and ask the merchant for those dates.';
         }
     }
 

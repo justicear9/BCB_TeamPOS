@@ -8,6 +8,7 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Modules\AIBusinessManager\Services\Concerns\AccountingSnapshotTools;
 use Modules\AIBusinessManager\Services\Concerns\AggregatesTransactions;
+use Modules\AIBusinessManager\Services\Concerns\BakeryPlanningTools;
 use Modules\AIBusinessManager\Services\Concerns\ContactAndCatalogTools;
 use Modules\AIBusinessManager\Services\Concerns\ExtendedBusinessDataTools;
 use Modules\AIBusinessManager\Services\Concerns\InventoryIntelligenceTools;
@@ -18,6 +19,7 @@ class BusinessDataToolService
 {
     use AccountingSnapshotTools;
     use AggregatesTransactions;
+    use BakeryPlanningTools;
     use ContactAndCatalogTools;
     use ExtendedBusinessDataTools;
     use InventoryIntelligenceTools;
@@ -39,7 +41,7 @@ class BusinessDataToolService
                 'type' => 'function',
                 'function' => [
                     'name' => 'sales_aggregate',
-                    'description' => 'Aggregate final sell invoices: revenue, invoice count, and quantity_selling_uom (sum of net qty in each line\'s invoice unit — TeamPOS sub_unit / base multiplier, not raw DB base units). Month/year buckets include the same qty field.',
+                    'description' => 'Aggregate final sell invoices: revenue, invoice count, quantity_selling_uom, quantity_by_unit, and quantity_product_count. When quantity_units_mixed is true, quote quantity_by_unit. When several products share one unit, do not describe the total as one product.',
                     'parameters' => [
                         'type' => 'object',
                         'properties' => [
@@ -155,7 +157,7 @@ class BusinessDataToolService
                 'type' => 'function',
                 'function' => [
                     'name' => 'top_customers',
-                    'description' => 'Customers ranked by finalized sell revenue (contacts type customer/both). Each row: display name, revenue, invoice count.',
+                    'description' => 'Customers ranked by finalized sell revenue. Includes walk_in_share. A walk-in contact is counter sales booked to a generic name, not one person. Use the label is_walk_in on rows.',
                     'parameters' => [
                         'type' => 'object',
                         'properties' => [
@@ -267,7 +269,7 @@ class BusinessDataToolService
                 'type' => 'function',
                 'function' => [
                     'name' => 'sale_payment_mix',
-                    'description' => 'Payments linked to finalized sell invoices only (transaction_payments.transaction_id NOT NULL join transactions). Amounts grouped by payment method. Date filter uses COALESCE(paid_on, created_at). Excludes standalone contact payments (no invoice link).',
+                    'description' => 'Payments linked to finalized sell invoices, grouped by method. Each row has method (code) and label (merchant name, including custom_pay_1..7 from business labels). Tell the merchant the label. Date filter uses COALESCE(paid_on, created_at). Excludes payments with no invoice.',
                     'parameters' => [
                         'type' => 'object',
                         'properties' => [
@@ -282,7 +284,7 @@ class BusinessDataToolService
                 'type' => 'function',
                 'function' => [
                     'name' => 'stock_adjustment_aggregate',
-                    'description' => 'Stock adjustments finalized as received: sums line quantities split increase vs decrease (adjustment_direction; defaults decrease when null). Optional granularity by adjustment transaction_date.',
+                    'description' => 'Received stock adjustments: qty increase, qty decrease, and decrease split into normal vs abnormal (transactions.adjustment_type). Normal is everyday leakage, damage, spoilage, or a count correction. Abnormal is an unusual loss such as fire or accident. Do not call every decrease waste.',
                     'parameters' => [
                         'type' => 'object',
                         'properties' => [
@@ -711,6 +713,66 @@ class BusinessDataToolService
             [
                 'type' => 'function',
                 'function' => [
+                    'name' => 'open_sells',
+                    'description' => 'Snapshot of sells that are not completed revenue: drafts, quotations, and suspended tickets. Counts and value by status and location. Do not add this to sales totals.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'location_id' => ['type' => 'integer'],
+                        ],
+                        'required' => [],
+                    ],
+                ],
+            ],
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'bake_plan',
+                    'description' => 'Suggested production for a target date (default tomorrow in the business timezone). Averages quantity sold on the previous same weekdays (default 4) and subtracts on-hand. When recipes exist, bake rows are recipe products only. Guide from past sales, not a confirmed order.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'target_date' => ['type' => 'string', 'description' => 'YYYY-MM-DD. Defaults to tomorrow in the business timezone.'],
+                            'weeks' => ['type' => 'integer', 'description' => 'How many previous same weekdays to average. 1–12, default 4.'],
+                            'location_id' => ['type' => 'integer'],
+                        ],
+                        'required' => [],
+                    ],
+                ],
+            ],
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'stock_days_of_cover',
+                    'description' => 'On-hand divided by average quantity sold on the same weekday (default tomorrow, last 4 of that weekday). Cover above 1 lasts past one of those days. If the merchant says goods are same-day perishable, cover above 1 is likely leftover. Do not assume perishability otherwise.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'target_date' => ['type' => 'string'],
+                            'weeks' => ['type' => 'integer'],
+                            'location_id' => ['type' => 'integer'],
+                        ],
+                        'required' => [],
+                    ],
+                ],
+            ],
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'recipe_unit_cost',
+                    'description' => 'Cost per yield unit from manufacturing recipes: ingredient default purchase price plus recipe production cost, divided by yield, next to the default sell price. Not a full energy or labour study. Unavailable when the manufacturing tables are missing.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'name_query' => ['type' => 'string', 'description' => 'Optional substring of the finished product name.'],
+                        ],
+                        'required' => [],
+                    ],
+                ],
+            ],
+            [
+                'type' => 'function',
+                'function' => [
                     'name' => 'accounting_trial_balance_summary',
                     'description' => 'When Accounting module is installed and user may view reports: debit/credit totals per account in date range (capped rows) plus grand totals. Not a substitute for the full TB export.',
                     'parameters' => [
@@ -840,6 +902,10 @@ class BusinessDataToolService
             'basket_metrics' => json_encode($this->basketMetrics($args, $businessId, $user)),
             'sales_by_cashier' => json_encode($this->salesByCashier($args, $businessId, $user)),
             'discount_summary' => json_encode($this->discountSummary($args, $businessId, $user)),
+            'open_sells' => json_encode($this->openSells($args, $businessId, $user)),
+            'bake_plan' => json_encode($this->bakePlan($args, $businessId, $user)),
+            'stock_days_of_cover' => json_encode($this->stockDaysOfCover($args, $businessId, $user)),
+            'recipe_unit_cost' => json_encode($this->recipeUnitCost($args, $businessId, $user)),
             'accounting_trial_balance_summary' => json_encode($this->accountingTrialBalanceSummary($args, $businessId, $user)),
             'accounting_ar_ageing_summary' => json_encode($this->accountingArAgeingSummary($args, $businessId, $user)),
             'accounting_ap_ageing_summary' => json_encode($this->accountingApAgeingSummary($args, $businessId, $user)),
@@ -882,12 +948,17 @@ class BusinessDataToolService
 
             $qty_selling = (float) $this->sellLinesInRangeQuery($businessId, $location_ids, $start, $end)
                 ->sum(DB::raw($this->qtySellingUomSql()));
+            $qtyContext = $this->quantityContext($businessId, $location_ids, $start, $end);
 
             return [
                 'ok' => true,
                 'granularity' => 'total',
                 'currency_code' => $code,
                 'currency_symbol' => $symbol,
+                'quantity_by_unit' => $qtyContext['quantity_by_unit'],
+                'quantity_units_mixed' => $qtyContext['quantity_units_mixed'],
+                'quantity_product_count' => $qtyContext['quantity_product_count'],
+                'note' => $qtyContext['note'],
                 'rows' => [[
                     'revenue' => round((float) ($row->revenue ?? 0), $precision),
                     'invoices' => (int) ($row->invoices ?? 0),
@@ -913,11 +984,17 @@ class BusinessDataToolService
                 ->get()
                 ->keyBy(fn ($row) => (string) $row->period);
 
+            $qtyContext = $this->quantityContext($businessId, $location_ids, $start, $end);
+
             return [
                 'ok' => true,
                 'granularity' => 'month',
                 'currency_code' => $code,
                 'currency_symbol' => $symbol,
+                'quantity_by_unit' => $qtyContext['quantity_by_unit'],
+                'quantity_units_mixed' => $qtyContext['quantity_units_mixed'],
+                'quantity_product_count' => $qtyContext['quantity_product_count'],
+                'note' => $qtyContext['note'],
                 'rows' => $rows->map(function ($r) use ($qtyByPeriod, $precision) {
                     $u = $qtyByPeriod->get((string) $r->period);
 
@@ -947,11 +1024,17 @@ class BusinessDataToolService
             ->get()
             ->keyBy(fn ($row) => (string) $row->period);
 
+        $qtyContext = $this->quantityContext($businessId, $location_ids, $start, $end);
+
         return [
             'ok' => true,
             'granularity' => 'year',
             'currency_code' => $code,
             'currency_symbol' => $symbol,
+            'quantity_by_unit' => $qtyContext['quantity_by_unit'],
+            'quantity_units_mixed' => $qtyContext['quantity_units_mixed'],
+            'quantity_product_count' => $qtyContext['quantity_product_count'],
+            'note' => $qtyContext['note'],
             'rows' => $rows->map(function ($r) use ($qtyByPeriod, $precision) {
                 $u = $qtyByPeriod->get((string) $r->period);
 
@@ -1547,15 +1630,31 @@ class BusinessDataToolService
         $limit = isset($args['limit']) ? (int) $args['limit'] : 10;
         $limit = max(1, min(25, $limit));
 
-        $rows = DB::table('transactions as t')
-            ->join('contacts as c', 'c.id', '=', 't.contact_id')
-            ->whereNull('c.deleted_at')
+        $scoped = DB::table('transactions as t')
+            ->leftJoin('contacts as c', 'c.id', '=', 't.contact_id')
             ->where('t.business_id', $businessId)
             ->where('t.type', 'sell')
             ->where('t.status', 'final')
-            ->whereIn('c.type', ['customer', 'both'])
             ->whereBetween('t.transaction_date', [$start, $end])
-            ->when($location_ids !== null, fn ($q) => $q->whereIn('t.location_id', $location_ids))
+            ->when($location_ids !== null, fn ($q) => $q->whereIn('t.location_id', $location_ids));
+
+        $walkSql = "(LOWER(COALESCE(c.name, '')) LIKE '%walk-in%' OR LOWER(COALESCE(c.name, '')) LIKE '%walk in%' OR LOWER(COALESCE(c.name, '')) LIKE '%walkin%' OR LOWER(COALESCE(c.supplier_business_name, '')) LIKE '%walk-in%' OR LOWER(COALESCE(c.supplier_business_name, '')) LIKE '%walk in%' OR LOWER(COALESCE(c.supplier_business_name, '')) LIKE '%walkin%')";
+
+        $totals = (clone $scoped)
+            ->selectRaw('COUNT(*) as invoices')
+            ->selectRaw('SUM(t.final_total) as revenue')
+            ->selectRaw("SUM(CASE WHEN {$walkSql} THEN 1 ELSE 0 END) as walk_in_invoices")
+            ->selectRaw("SUM(CASE WHEN {$walkSql} THEN t.final_total ELSE 0 END) as walk_in_revenue")
+            ->first();
+
+        $totalInvoices = (int) ($totals->invoices ?? 0);
+        $totalRevenue = (float) ($totals->revenue ?? 0);
+        $walkInvoices = (int) ($totals->walk_in_invoices ?? 0);
+        $walkRevenue = (float) ($totals->walk_in_revenue ?? 0);
+
+        $rows = (clone $scoped)
+            ->whereNull('c.deleted_at')
+            ->whereIn('c.type', ['customer', 'both'])
             ->groupBy('c.id', 'c.name', 'c.supplier_business_name')
             ->orderByDesc(DB::raw('SUM(t.final_total)'))
             ->limit($limit)
@@ -1568,11 +1667,23 @@ class BusinessDataToolService
         return [
             'ok' => true,
             'currency_symbol' => $symbol,
-            'rows' => $rows->map(fn ($r) => [
-                'customer_name' => (string) $r->customer_name,
-                'revenue' => round((float) $r->revenue, $precision),
-                'invoices' => (int) $r->invoices,
-            ])->values()->all(),
+            'walk_in_share' => [
+                'invoices' => $walkInvoices,
+                'revenue' => round($walkRevenue, $precision),
+                'share_of_invoices' => $totalInvoices > 0 ? round($walkInvoices / $totalInvoices, 4) : 0.0,
+                'share_of_revenue' => $totalRevenue > 0 ? round($walkRevenue / $totalRevenue, 4) : 0.0,
+            ],
+            'note' => 'is_walk_in marks a generic counter contact (name contains walk-in). That revenue is many unnamed sales, not one customer.',
+            'rows' => $rows->map(function ($r) use ($precision) {
+                $name = (string) $r->customer_name;
+
+                return [
+                    'customer_name' => $name,
+                    'is_walk_in' => $this->isWalkInContactName($name),
+                    'revenue' => round((float) $r->revenue, $precision),
+                    'invoices' => (int) $r->invoices,
+                ];
+            })->values()->all(),
         ];
     }
 
@@ -1828,6 +1939,86 @@ class BusinessDataToolService
                 ];
             })->values()->all(),
         ];
+    }
+
+    /**
+     * @param  ?array<int>  $location_ids
+     * @return list<array{unit: string, quantity: float}>
+     */
+    protected function quantityBySellingUnit(int $businessId, ?array $location_ids, Carbon $start, Carbon $end): array
+    {
+        $unitExpr = 'COALESCE(NULLIF(TRIM(sell_unit.short_name), ""), NULLIF(TRIM(base_u.short_name), ""), "unit")';
+
+        $rows = $this->sellLinesInRangeQuery($businessId, $location_ids, $start, $end)
+            ->join('products as p_u', 'p_u.id', '=', 'tsl.product_id')
+            ->leftJoin('units as base_u', 'base_u.id', '=', 'p_u.unit_id')
+            ->groupBy(DB::raw($unitExpr))
+            ->orderByDesc(DB::raw('SUM('.$this->qtySellingUomSql().')'))
+            ->selectRaw($unitExpr.' as unit')
+            ->selectRaw('SUM('.$this->qtySellingUomSql().') as quantity')
+            ->get();
+
+        return $rows->map(fn ($r) => [
+            'unit' => (string) $r->unit,
+            'quantity' => $this->roundQuantity((float) $r->quantity),
+        ])->values()->all();
+    }
+
+    /**
+     * @param  ?array<int>  $location_ids
+     * @return array{quantity_by_unit: list<array{unit: string, quantity: float}>, quantity_units_mixed: bool, quantity_product_count: int, note: ?string}
+     */
+    protected function quantityContext(int $businessId, ?array $location_ids, Carbon $start, Carbon $end): array
+    {
+        $byUnit = $this->quantityBySellingUnit($businessId, $location_ids, $start, $end);
+        $products = (int) $this->sellLinesInRangeQuery($businessId, $location_ids, $start, $end)
+            ->selectRaw('COUNT(DISTINCT tsl.product_id) as c')
+            ->value('c');
+        $mixed = count($byUnit) > 1;
+        $note = null;
+        if ($mixed) {
+            $note = 'quantity_selling_uom adds every unit together. Quote quantity_by_unit instead of that sum.';
+        } elseif ($products > 1) {
+            $note = 'quantity_selling_uom adds every product sold in this unit. Do not describe the total as one product.';
+        }
+
+        return [
+            'quantity_by_unit' => $byUnit,
+            'quantity_units_mixed' => $mixed,
+            'quantity_product_count' => $products,
+            'note' => $note,
+        ];
+    }
+
+    protected function paymentMethodLabel(int $businessId, string $method): string
+    {
+        static $cache = [];
+        if (! isset($cache[$businessId])) {
+            $raw = DB::table('business')->where('id', $businessId)->value('custom_labels');
+            $labels = json_decode((string) $raw, true);
+            $payments = is_array($labels) ? ($labels['payments'] ?? []) : [];
+            $map = [
+                'cash' => 'Cash',
+                'card' => 'Card',
+                'cheque' => 'Cheque',
+                'bank_transfer' => 'Bank transfer',
+                'other' => 'Other',
+                'advance' => 'Advance',
+            ];
+            for ($i = 1; $i <= 7; $i++) {
+                $key = 'custom_pay_'.$i;
+                $custom = isset($payments[$key]) ? trim((string) $payments[$key]) : '';
+                $map[$key] = $custom !== '' ? $custom : 'Custom payment '.$i;
+            }
+            $cache[$businessId] = $map;
+        }
+
+        return $cache[$businessId][$method] ?? $method;
+    }
+
+    protected function isWalkInContactName(string $name): bool
+    {
+        return preg_match('/walk[\s-]*in/i', $name) === 1;
     }
 
     /**
