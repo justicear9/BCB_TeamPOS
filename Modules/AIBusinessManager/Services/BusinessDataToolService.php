@@ -14,6 +14,7 @@ use Modules\AIBusinessManager\Services\Concerns\ExtendedBusinessDataTools;
 use Modules\AIBusinessManager\Services\Concerns\InventoryIntelligenceTools;
 use Modules\AIBusinessManager\Services\Concerns\LocationSalesMatrixTools;
 use Modules\AIBusinessManager\Services\Concerns\ReportAlignedTools;
+use Modules\AIBusinessManager\Services\Concerns\SalesReportTool;
 use Modules\AIBusinessManager\Services\Concerns\TransactionAndAnalyticsTools;
 
 class BusinessDataToolService
@@ -26,6 +27,7 @@ class BusinessDataToolService
     use InventoryIntelligenceTools;
     use LocationSalesMatrixTools;
     use ReportAlignedTools;
+    use SalesReportTool;
     use TransactionAndAnalyticsTools;
 
     public function __construct(
@@ -155,6 +157,29 @@ class BusinessDataToolService
                             'limit' => ['type' => 'integer', 'description' => 'Max products. Default 25, or 15 when by_month is true.'],
                         ],
                         'required' => [],
+                    ],
+                ],
+            ],
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'sales_report',
+                    'description' => 'Read-only sales view for this business. Pick group_by from month, day, weekday, location, product, category (one to three). Invoice revenue unless product or category is included, then sell-line revenue. Always limited to this business and the user locations. Omit dates for 1 January through today. Do not write the table or any amount; the app attaches the result.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'group_by' => [
+                                'type' => 'array',
+                                'items' => ['type' => 'string', 'enum' => ['month', 'day', 'weekday', 'location', 'product', 'category']],
+                                'description' => 'Example ["location","month"] or ["product","location"].',
+                            ],
+                            'start_date' => ['type' => 'string'],
+                            'end_date' => ['type' => 'string'],
+                            'location_id' => ['type' => 'integer'],
+                            'name_query' => ['type' => 'string', 'description' => 'Optional product name substring.'],
+                            'limit' => ['type' => 'integer'],
+                        ],
+                        'required' => ['group_by'],
                     ],
                 ],
             ],
@@ -905,6 +930,7 @@ class BusinessDataToolService
             'revenue_by_location' => json_encode($this->revenueByLocation($args, $businessId, $user)),
             'sales_by_location_month' => json_encode($this->salesByLocationMonth($args, $businessId, $user)),
             'sales_by_product_location' => json_encode($this->salesByProductLocation($args, $businessId, $user)),
+            'sales_report' => json_encode($this->salesReport($args, $businessId, $user)),
             'purchase_aggregate' => json_encode($this->purchaseAggregate($args, $businessId, $user)),
             'expense_aggregate' => json_encode($this->expenseAggregate($args, $businessId, $user)),
             'top_customers' => json_encode($this->topCustomers($args, $businessId, $user)),
