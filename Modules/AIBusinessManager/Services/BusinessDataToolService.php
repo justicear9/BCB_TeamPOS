@@ -629,8 +629,24 @@ class BusinessDataToolService
             [
                 'type' => 'function',
                 'function' => [
+                    'name' => 'sales_by_weekday',
+                    'description' => 'Final sells ranked by weekday revenue (highest first). Each row has day_name, revenue, invoices, quantity, share_of_revenue, and busiest_hour. Use this — not hour rows — whenever the merchant asks which day sells the most or for a day-of-week ranking. Present rows in rank order and use day_name exactly.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'start_date' => ['type' => 'string'],
+                            'end_date' => ['type' => 'string'],
+                            'location_id' => ['type' => 'integer'],
+                        ],
+                        'required' => ['start_date', 'end_date'],
+                    ],
+                ],
+            ],
+            [
+                'type' => 'function',
+                'function' => [
                     'name' => 'sales_by_hour_weekday',
-                    'description' => 'Final sells: revenue and invoice count grouped by hour-of-day and MySQL DAYOFweek.',
+                    'description' => 'Final sells by clock hour and weekday. Includes weekday_ranking (revenue order, with day_name). Use the ranking for which day earns the most. Use hour rows only to describe busy times of day. Do not sum hour rows or rename days.',
                     'parameters' => [
                         'type' => 'object',
                         'properties' => [
@@ -819,6 +835,7 @@ class BusinessDataToolService
             'product_margin_snapshot' => json_encode($this->productMarginSnapshot($args, $businessId, $user)),
             'lot_sell_trace' => json_encode($this->lotSellTrace($args, $businessId, $user)),
             'reorder_cover_hint' => json_encode($this->reorderCoverHint($args, $businessId, $user)),
+            'sales_by_weekday' => json_encode($this->salesByWeekday($args, $businessId, $user)),
             'sales_by_hour_weekday' => json_encode($this->salesByHourWeekday($args, $businessId, $user)),
             'basket_metrics' => json_encode($this->basketMetrics($args, $businessId, $user)),
             'sales_by_cashier' => json_encode($this->salesByCashier($args, $businessId, $user)),

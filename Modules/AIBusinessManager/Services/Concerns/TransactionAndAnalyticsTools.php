@@ -224,26 +224,127 @@ trait TransactionAndAnalyticsTools
             ->where('t.status', 'final')
             ->whereBetween('t.transaction_date', [$start, $end])
             ->when($location_ids !== null, fn ($q) => $q->whereIn('t.location_id', $location_ids))
-            ->groupBy(DB::raw('HOUR(t.transaction_date)'), DB::raw('DAYOFWEEK(t.transaction_date)'))
+            ->groupBy(DB::raw('HOUR(t.transaction_date)'), DB::raw('DAYOFWEEK(t.transaction_date)'), DB::raw('DAYNAME(t.transaction_date)'))
             ->orderBy(DB::raw('DAYOFWEEK(t.transaction_date)'))
             ->orderBy(DB::raw('HOUR(t.transaction_date)'))
             ->selectRaw('HOUR(t.transaction_date) as hour_of_day')
             ->selectRaw('DAYOFWEEK(t.transaction_date) as day_of_week')
+            ->selectRaw('DAYNAME(t.transaction_date) as day_name')
             ->selectRaw('COUNT(*) as invoices')
             ->selectRaw('SUM(t.final_total) as revenue')
             ->limit(200)
             ->get();
 
+        $ranking = $this->salesByWeekday($args, $businessId, $user);
+
         return [
             'ok' => true,
             'currency_symbol' => $symbol,
-            'note' => 'day_of_week: MySQL 1=Sunday … 7=Saturday.',
+            'note' => 'Hour rows show when sales happen. For which weekday earns the most, use weekday_ranking (already sorted by revenue). Do not add the hour rows up yourself or rename the days.',
+            'weekday_ranking' => ($ranking['ok'] ?? false) ? $ranking['rows'] : [],
             'rows' => $rows->map(fn ($r) => [
                 'hour_of_day' => (int) $r->hour_of_day,
                 'day_of_week' => (int) $r->day_of_week,
+                'day_name' => (string) $r->day_name,
                 'invoices' => (int) $r->invoices,
                 'revenue' => round((float) $r->revenue, $precision),
             ])->values()->all(),
+        ];
+    }
+
+    /**
+     * Final sells ranked by weekday revenue. Day names come from MySQL so the model cannot relabel them.
+     *
+     * @param  array<string, mixed>  $args
+     * @return array<string, mixed>
+     */
+    protected function salesByWeekday(array $args, int $businessId, User $user): array
+    {
+        $range = $this->parseDateRange($args, $businessId, $user);
+        if (isset($range['ok']) && $range['ok'] === false) {
+            return $range;
+        }
+        $start = $range['start'];
+        $end = $range['end'];
+        $location_ids = $range['location_ids'];
+        if (isset($args['location_id']) && is_numeric($args['location_id'])) {
+            $lid = (int) $args['location_id'];
+            $permitted = $user->permitted_locations();
+            if ($permitted === 'all' || (is_array($permitted) && in_array($lid, $permitted, true))) {
+                $location_ids = [$lid];
+            }
+        }
+
+        $precision = $range['precision'];
+        $symbol = $range['symbol'];
+
+        $totals = DB::table('transactions as t')
+            ->where('t.business_id', $businessId)
+            ->where('t.type', 'sell')
+            ->where('t.status', 'final')
+            ->whereBetween('t.transaction_date', [$start, $end])
+            ->when($location_ids !== null, fn ($q) => $q->whereIn('t.location_id', $location_ids))
+            ->groupBy(DB::raw('DAYOFWEEK(t.transaction_date)'), DB::raw('DAYNAME(t.transaction_date)'))
+            ->orderByDesc(DB::raw('SUM(t.final_total)'))
+            ->selectRaw('DAYOFWEEK(t.transaction_date) as day_of_week')
+            ->selectRaw('DAYNAME(t.transaction_date) as day_name')
+            ->selectRaw('COUNT(*) as invoices')
+            ->selectRaw('SUM(t.final_total) as revenue')
+            ->get();
+
+        $qtyByDay = $this->sellLinesInRangeQuery($businessId, $location_ids, $start, $end)
+            ->groupBy(DB::raw('DAYOFWEEK(t.transaction_date)'))
+            ->selectRaw('DAYOFWEEK(t.transaction_date) as day_of_week')
+            ->selectRaw('SUM('.$this->qtySellingUomSql().') as quantity_selling_uom')
+            ->pluck('quantity_selling_uom', 'day_of_week');
+
+        $peakHours = DB::table('transactions as t')
+            ->where('t.business_id', $businessId)
+            ->where('t.type', 'sell')
+            ->where('t.status', 'final')
+            ->whereBetween('t.transaction_date', [$start, $end])
+            ->when($location_ids !== null, fn ($q) => $q->whereIn('t.location_id', $location_ids))
+            ->groupBy(DB::raw('DAYOFWEEK(t.transaction_date)'), DB::raw('HOUR(t.transaction_date)'))
+            ->selectRaw('DAYOFWEEK(t.transaction_date) as day_of_week')
+            ->selectRaw('HOUR(t.transaction_date) as hour_of_day')
+            ->selectRaw('SUM(t.final_total) as revenue')
+            ->get()
+            ->groupBy('day_of_week')
+            ->map(function ($hours) {
+                $best = $hours->sortByDesc(fn ($h) => (float) $h->revenue)->first();
+
+                return $best ? (int) $best->hour_of_day : null;
+            });
+
+        $totalRevenue = (float) $totals->sum(fn ($r) => (float) $r->revenue);
+        $totalInvoices = (int) $totals->sum(fn ($r) => (int) $r->invoices);
+
+        $rows = [];
+        $rank = 1;
+        foreach ($totals as $r) {
+            $revenue = round((float) $r->revenue, $precision);
+            $rows[] = [
+                'rank' => $rank,
+                'day_name' => (string) $r->day_name,
+                'day_of_week' => (int) $r->day_of_week,
+                'revenue' => $revenue,
+                'invoices' => (int) $r->invoices,
+                'quantity_selling_uom' => $this->roundQuantity((float) ($qtyByDay[(int) $r->day_of_week] ?? 0)),
+                'share_of_revenue' => $totalRevenue > 0 ? round($revenue / $totalRevenue, 4) : 0.0,
+                'busiest_hour' => $peakHours[(int) $r->day_of_week] ?? null,
+            ];
+            $rank++;
+        }
+
+        return [
+            'ok' => true,
+            'currency_symbol' => $symbol,
+            'start' => $start->toDateTimeString(),
+            'end' => $end->toDateTimeString(),
+            'total_revenue' => round($totalRevenue, $precision),
+            'total_invoices' => $totalInvoices,
+            'note' => 'rows are already ranked by revenue, highest first. day_name is from the database. Present this order. busiest_hour is the clock hour with the most revenue on that weekday (0–23) and must not change the rank.',
+            'rows' => $rows,
         ];
     }
 
