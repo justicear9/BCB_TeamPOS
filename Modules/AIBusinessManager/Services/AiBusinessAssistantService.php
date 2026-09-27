@@ -101,8 +101,8 @@ Behavior:
 - For **one product’s sales over time** (trend, chart, “how is X selling”): call `product_sales_trend` with `name_query` (substring of catalog name or SKU) or `product_id`, plus `granularity` `day` (≤200-day span), `week`, or `month`. If the tool returns `ambiguous`, ask the merchant to pick a `product_id` from `matches` and call again. Empty `rows` with a resolved product means **no finalized sell lines** in that date range (or no access), not a missing tool.
 - Combine results with clear Markdown (short headings, bullets). Keep answers concise unless the user asks for depth.
 - **Weekday ranking**: when the merchant asks which day sells the most, or for a ranking of days, call `sales_by_weekday` and list `rows` in `rank` order using `day_name` exactly. Do not reorder those rows, and do not decide the winning day from the busiest evening hour. `busiest_hour` only says when that day peaks. If you also mention busy hours, they must not change the revenue ranking. The listed revenues must add up to `total_revenue`.
-- **Location by month**: when the merchant asks for month-on-month sales, sales by revenue center, or how each shop did from January to date, call `sales_by_location_month` and omit dates unless they named a range. Do **not** write a markdown table and do **not** write an `aibm-chart`. Write a short reading of the pattern only (which shop leads, where a month jumped, which shop was quiet). The app attaches the official table and chart from the tool, with the exact figures.
-- **Product by location**: when they ask how products sold at each shop, call `sales_by_product_location`. Do **not** write a markdown table or chart for that tool either. Comment on where each product actually sells. Set `by_month` only if they also want that product split month by month.
+- **Location by month**: when the merchant asks for month-on-month sales, sales by revenue center, or how each shop did from January to date, call `sales_by_location_month` and omit dates unless they named a range. Do **not** write a markdown table, an `aibm-chart`, or any amount, count, or total. Write a short reading of the pattern only (which shop leads, where a month jumped, which shop was quiet). The app attaches the database table and chart. Never adjust a figure so the table matches a total from earlier in the chat.
+- **Product by location**: when they ask how products sold at each shop, call `sales_by_product_location`. Do **not** write a table, chart, or any amount. Comment on where each product actually sells. Set `by_month` only if they also want that product split month by month.
 - **Mixed units**: when `quantity_units_mixed` is true, quote `quantity_by_unit`. Do not add quantities that use different units. When `quantity_product_count` is greater than 1, the quantity total mixes products (loaves and rolls can share one unit). Do not describe that total as one product.
 - **What to bake / what is left**: use `bake_plan` for a production suggestion and `stock_days_of_cover` for how long on-hand lasts versus that weekday’s sales. `suggested_bake` is a guide from past sales, not a confirmed order. Use `recipe_unit_cost` for cost per yield unit and say it uses default purchase prices plus the recipe production cost.
 - **Holidays and campus**: use the PUBLIC HOLIDAYS block when it is present. Do not invent holiday dates or campus term dates that are not listed.
@@ -207,7 +207,7 @@ REPORT_RULE;
     }
 
     /**
-     * Drop any table or chart the model drew and attach the tool's official grid.
+     * Drop any table, chart, or amount the model wrote, then attach the tool's database grid.
      *
      * @param  list<string>  $grids
      */
@@ -219,6 +219,9 @@ REPORT_RULE;
 
         $text = preg_replace('/```aibm-chart\s*\r?\n[\s\S]*?```/i', '', $text) ?? $text;
         $text = preg_replace('/(?:^|\n)(?:\|[^\n]*\|[ \t]*(?:\n|$)){2,}/', "\n", $text) ?? $text;
+        $text = preg_replace('/(?:¢|₵|GH₵|GHS\s*)\s*[\d,]+(?:\.\d+)?/u', '', $text) ?? $text;
+        $text = preg_replace('/\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b/', '', $text) ?? $text;
+        $text = preg_replace('/[ \t]{2,}/', ' ', $text) ?? $text;
         $text = trim($text);
 
         return ($text !== '' ? $text."\n\n" : '').implode("\n\n", $grids);
