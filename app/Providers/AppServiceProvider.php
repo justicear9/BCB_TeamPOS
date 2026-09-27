@@ -32,6 +32,16 @@ class AppServiceProvider extends ServiceProvider
         ini_set('memory_limit', '-1');
         set_time_limit(0);
 
+        // Modules register custom_views/modules/* and resources/views/modules/*
+        // even when those override folders don't exist, which breaks view:cache.
+        $this->app->booted(function () {
+            $finder = View::getFinder();
+            $finder->setPaths(array_values(array_filter($finder->getPaths(), 'is_dir')));
+            foreach ($finder->getHints() as $namespace => $paths) {
+                $finder->replaceNamespace($namespace, array_values(array_filter($paths, 'is_dir')));
+            }
+        });
+
         if (config('app.debug')) {
             error_reporting(E_ALL & ~E_USER_DEPRECATED);
         } else {
