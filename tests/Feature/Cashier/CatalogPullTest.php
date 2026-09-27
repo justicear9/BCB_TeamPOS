@@ -30,6 +30,20 @@ class CatalogPullTest extends TestCase
         $customer = collect($changes['customers'])->firstWhere('id', $fx['contact']->id);
         $this->assertSame(1, (int) $customer['is_default']);
         $this->assertContains('cash', array_column($changes['payment_methods'], 'id'));
+        $this->assertArrayHasKey('display_name', $changes['receipt']);
+        $this->assertNotSame('', $changes['receipt']['invoice_heading']);
+    }
+
+    public function test_pull_returns_current_stock_when_the_cursor_is_ahead_of_the_database(): void
+    {
+        $fx = CashierFixture::make();
+        auth()->setUser($fx['user']);
+
+        $changes = app(CatalogPull::class)->changes($fx['user'], $fx['location']->id, '2099-01-01 00:00:00');
+        $product = collect($changes['products'])->firstWhere('variation_id', $fx['variation']->id);
+
+        $this->assertEquals(5, (float) $product['qty_available']);
+        $this->assertLessThan('2099-01-01 00:00:00', $changes['server_time']);
     }
 
     public function test_pull_rejects_a_location_the_user_cannot_access(): void

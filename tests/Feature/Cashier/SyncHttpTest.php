@@ -19,7 +19,7 @@ class SyncHttpTest extends TestCase
             'device_ref' => 'C-ABCDEF-000001',
             'location_id' => $fx['location']->id,
             'contact_id' => $fx['contact']->id,
-            'transaction_date' => '2026-09-27 10:00:00',
+            'transaction_date' => now()->subMinutes(5)->toIso8601String(),
             'products' => [[
                 'product_id' => $fx['product']->id,
                 'variation_id' => $fx['variation']->id,

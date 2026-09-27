@@ -47,10 +47,11 @@ class CashierFixture
         $user->business_id = $business->id;
         $user->save();
 
-        foreach (['sell.create', 'access_all_locations'] as $name) {
+        $permissions = ['sell.create', 'sell.payments', 'access_all_locations', 'close_cash_register', 'access_sell_return', 'customer.create', 'customer.update'];
+        foreach ($permissions as $name) {
             Permission::findOrCreate($name, 'web');
         }
-        $user->givePermissionTo(['sell.create', 'access_all_locations']);
+        $user->givePermissionTo($permissions);
 
         $scheme = InvoiceScheme::create([
             'business_id' => $business->id,
@@ -104,6 +105,8 @@ class CashierFixture
             'is_inactive' => 0,
             'not_for_selling' => 0,
         ]);
+
+        $product->product_locations()->sync([$location->id]);
 
         $productVariation = ProductVariation::create([
             'name' => 'DUMMY',
