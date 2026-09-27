@@ -68,6 +68,7 @@ export async function pullLocation(locationId) {
         customer.is_default
       );
     }
+    const refreshed = new Set(json.products.map((product) => Number(product.variation_id)));
     const pending = await db.getAllAsync(
       `SELECT sale_lines.variation_id, sale_lines.quantity
        FROM sale_lines
@@ -75,6 +76,9 @@ export async function pullLocation(locationId) {
        WHERE sales.sync_state = 'pending'`
     );
     for (const line of pending) {
+      if (!refreshed.has(Number(line.variation_id))) {
+        continue;
+      }
       await db.runAsync(
         'UPDATE products SET qty_available = qty_available - ? WHERE variation_id = ?',
         line.quantity,

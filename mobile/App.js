@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, FlatList, Text, TextInput, View } from 'react-native';
-import { database } from './src/db';
+import { database, metaGet } from './src/db';
 import { login } from './src/api';
 import { fetchLocations, nextDeviceRef, pullLocation, pushOutbox } from './src/sync';
 
@@ -13,6 +13,8 @@ export default function App() {
   const [cart, setCart] = useState([]);
   const [sales, setSales] = useState([]);
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
 
   async function refreshLocal() {
     const db = await database();
@@ -21,7 +23,13 @@ export default function App() {
   }
 
   useEffect(() => {
-    database().then(refreshLocal);
+    (async () => {
+      const savedLocation = await metaGet('location_id');
+      if (savedLocation) {
+        setLocationId(Number(savedLocation));
+      }
+      await refreshLocal();
+    })().catch((e) => setError(e.message));
   }, []);
 
   async function onLogin() {
@@ -76,6 +84,22 @@ export default function App() {
   const total = cart.reduce((sum, line) => sum + line.quantity * line.unit_price, 0);
 
   async function finishSale() {
+    if (savingRef.current) {
+      return;
+    }
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      await saveSale();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  }
+
+  async function saveSale() {
     setError('');
     const db = await database();
     const customer = await db.getFirstAsync(
@@ -87,7 +111,7 @@ export default function App() {
     }
     const clientUuid = await newClientUuid();
     const deviceRef = await nextDeviceRef();
-    const transactionDate = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const transactionDate = localDateTime(new Date());
     const payload = {
       type: 'sale.create',
       client_uuid: clientUuid,
@@ -186,13 +210,21 @@ export default function App() {
       {cart.map((line) => (
         <Text key={line.variation_id}>{line.name} x {line.quantity}</Text>
       ))}
-      <Button title="Cash sale" onPress={finishSale} />
+      <Button title="Cash sale" onPress={finishSale} disabled={saving} />
       {sales.map((sale) => (
         <Text key={sale.client_uuid}>
           {sale.device_ref} {sale.invoice_no || sale.sync_state} {sale.error || ''}
         </Text>
       ))}
     </View>
+  );
+}
+
+function localDateTime(date) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
+    `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
   );
 }
 
