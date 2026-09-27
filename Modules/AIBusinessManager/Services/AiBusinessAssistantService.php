@@ -50,6 +50,7 @@ class AiBusinessAssistantService
         $model = config('aibusinessmanager.model', 'gpt-4o-mini');
         $max_tokens = (int) config('aibusinessmanager.max_output_tokens', 2048);
         $max_rounds = max(1, (int) config('aibusinessmanager.max_tool_rounds', 14));
+        $grids = [];
 
         $preamble = $this->context_builder->buildToolPreamble($business_id, $user, $report_page_context);
 
@@ -65,19 +66,21 @@ Scope and topic discipline (always enforce):
 - **Do not call tools** to satisfy unrelated curiosity; save tool rounds for business-grounded questions.
 
 Read-only tools (visible locations; date ranges capped server-side):
-- **Sales**: `sales_aggregate`, `top_products`, `product_sales_trend` (one product over time: day / ISO-week / month buckets; match by `product_id` or substring `name_query` on product name, variation name, or `sub_sku` — if several products match, tool returns `ambiguous` + `matches` to disambiguate), `top_categories`, `revenue_by_location`. Quantities use `quantity_selling_uom` (invoice-line unit via TeamPOS sub-unit / multiplier). Top qty: `sort_by: "quantity"` on products/categories.
+- **Sales**: `sales_aggregate`, `top_products`, `product_sales_trend` (one product over time: day / ISO-week / month buckets; match by `product_id` or substring `name_query` on product name, variation name, or `sub_sku` — if several products match, tool returns `ambiguous` + `matches` to disambiguate), `top_categories`, `revenue_by_location` (one total per location), `sales_by_location_month` (each location by calendar month), `sales_by_product_location` (each product at each location), `sales_report` (any other sales cut: pass `group_by` of month, day, weekday, location, product, category). Quantities use `quantity_selling_uom` (invoice-line unit via TeamPOS sub-unit / multiplier). Top qty: `sort_by: "quantity"` on products/categories.
 - **Returns**: `sell_return_aggregate` (final sell returns), `purchase_return_aggregate` (final purchase returns).
 - **Opening stock**: `opening_stock_aggregate` (received opening_stock; includes quantity from lines).
 - **Purchasing**: `purchase_aggregate` (completed purchases, status received), `top_suppliers`.
-- **Payments**: `sale_payment_mix` (payments tied to finalized sells only; excludes standalone contact payments with no invoice — see tool caveat).
+- **Payments**: `sale_payment_mix` (payments tied to finalized sells only; each row has `method` and `label`). Say `label` to the merchant (for example the business name for `custom_pay_1`). Do not say the code `custom_pay_1`.
 - **Expenses**: `expense_aggregate` (net of expense_refund).
-- **Customers / suppliers (POS)**: `top_customers` (ranked sell revenue), `contact_search` (find `contact_id` by name/ref), `contact_outstanding` (TeamPOS-style due components for one `contact_id`). **`receivables_ageing`** / **`payables_ageing`**: open invoices aged from **invoice transaction_date** (POS-style buckets); they do **not** apply pay-term due dates. For statutory due-date buckets use Accounting tools below when available.
+- **Customers / suppliers (POS)**: `top_customers` (ranked sell revenue, plus `walk_in_share`). A row with `is_walk_in` is counter sales on a generic contact, not one person. `contact_search` (find `contact_id` by name/ref), `contact_outstanding` (TeamPOS-style due components for one `contact_id`). **`receivables_ageing`** / **`payables_ageing`**: open invoices aged from **invoice transaction_date** (POS-style buckets); they do **not** apply pay-term due dates. For statutory due-date buckets use Accounting tools below when available.
 - **Catalog**: `product_search` (products/variations + optional on-hand for permitted locations).
 - **Invoice drill-down**: `transaction_detail` (`transaction_id` and/or `invoice_no` + optional `type`) — header, capped lines, payments.
 - **Inventory intelligence**: `slow_moving_stock` (on-hand vs low sell qty in window), `product_margin_snapshot` (top products: revenue vs `default_purchase_price` heuristic — see tool caveat), `lot_sell_trace` (purchase lot / line → sell allocations), `reorder_cover_hint` (cover days from avg daily sell UoM; may flag `low_confidence`).
-- **Retail analytics**: `sales_by_hour_weekday`, `basket_metrics` (`granularity` `range` or `day`), `sales_by_cashier` (respects view-own-sell restrictions), `discount_summary` (when discount columns exist).
+- **Retail analytics**: `sales_by_weekday` (day-of-week ranking by revenue — use this for “best day” / “rank the days”; `quantity_by_unit` when units differ), `sales_by_hour_weekday` (clock hour × weekday; its `weekday_ranking` is the same revenue order), `basket_metrics` (`granularity` `range` or `day`), `sales_by_cashier` (respects view-own-sell restrictions), `discount_summary` (when discount columns exist).
 - **Inventory snapshot**: `stock_by_variation` (current SUM(qty_available) per variation—no historical stock). **`stock_expiry_near`**: batches with `exp_date` and remaining stock (same aggregation idea as Stock Expiry Report: variation + expiry + lot); use for “expiring soon”, “near expiry”, expired stock still on hand (`include_expired`). Disabled if business product-expiry setting is off.
-- **Inventory movements**: `stock_adjustment_aggregate` (received adjustments; qty up/down), `stock_transfer_summary` (final paired transfers; qty from sell lines).
+- **Inventory movements**: `stock_adjustment_aggregate` (received adjustments; qty up/down, and decreases split into `qty_decrease_normal` vs `qty_decrease_abnormal`). Normal is everyday leakage, damage, spoilage, or a count correction. Abnormal is an unusual loss (fire, accident). Do not call every decrease waste. `stock_transfer_summary` (final paired transfers; qty from sell lines).
+- **Open tickets**: `open_sells` (drafts, quotations, suspended). Not finalized revenue.
+- **Production**: `bake_plan` (suggested make quantity for a date from the previous same weekdays, minus on-hand; recipe products when recipes exist), `recipe_unit_cost` (ingredient default purchase price plus recipe production cost, per yield unit — not a full energy or labour study), `stock_days_of_cover` (on-hand ÷ average same-weekday sales). If the merchant says goods are same-day perishable, cover above 1 is likely leftover. Do not assume perishability unless they said so.
 - **Orders**: `sales_order_pipeline`, `purchase_order_pipeline` (counts/value by status).
 - **Payroll**: `payroll_aggregate` (final payroll totals by period).
 - **Report-aligned (same engines / definitions as core TeamPOS reports; helps interpret what merchants see on screen)**:
@@ -97,6 +100,13 @@ Behavior:
 - Call tools with ISO dates (YYYY-MM-DD) except live snapshots: `stock_by_variation`, `stock_report_rows`, `stock_value_snapshot` (`as_at_date`), `stock_expiry_near` (`within_days` from **today** in the business timezone); all support optional permitted `location_id` where noted.
 - For **one product’s sales over time** (trend, chart, “how is X selling”): call `product_sales_trend` with `name_query` (substring of catalog name or SKU) or `product_id`, plus `granularity` `day` (≤200-day span), `week`, or `month`. If the tool returns `ambiguous`, ask the merchant to pick a `product_id` from `matches` and call again. Empty `rows` with a resolved product means **no finalized sell lines** in that date range (or no access), not a missing tool.
 - Combine results with clear Markdown (short headings, bullets). Keep answers concise unless the user asks for depth.
+- **Weekday ranking**: when the merchant asks which day sells the most, or for a ranking of days, call `sales_by_weekday` and list `rows` in `rank` order using `day_name` exactly. Do not reorder those rows, and do not decide the winning day from the busiest evening hour. `busiest_hour` only says when that day peaks. If you also mention busy hours, they must not change the revenue ranking. The listed revenues must add up to `total_revenue`.
+- **Location by month**: when the merchant asks for month-on-month sales, sales by revenue center, or how each shop did from January to date, call `sales_by_location_month` and omit dates unless they named a range. Do **not** write a markdown table, an `aibm-chart`, or any amount, count, or total. Write a short reading of the pattern only (which shop leads, where a month jumped, which shop was quiet). The app attaches the database table and chart. Never adjust a figure so the table matches a total from earlier in the chat.
+- **Product by location**: when they ask how products sold at each shop, call `sales_by_product_location`. Do **not** write a table, chart, or any amount. Comment on where each product actually sells. Set `by_month` only if they also want that product split month by month.
+- **Other sales cuts**: call `sales_report` with `group_by` instead of guessing or asking for a new tool. Same rule: no table, no chart, no amount in your own text. The database result is attached for you.
+- **Mixed units**: when `quantity_units_mixed` is true, quote `quantity_by_unit`. Do not add quantities that use different units. When `quantity_product_count` is greater than 1, the quantity total mixes products (loaves and rolls can share one unit). Do not describe that total as one product.
+- **What to bake / what is left**: use `bake_plan` for a production suggestion and `stock_days_of_cover` for how long on-hand lasts versus that weekday’s sales. `suggested_bake` is a guide from past sales, not a confirmed order. Use `recipe_unit_cost` for cost per yield unit and say it uses default purchase prices plus the recipe production cost.
+- **Holidays and campus**: use the PUBLIC HOLIDAYS block when it is present. Do not invent holiday dates or campus term dates that are not listed.
 - **Charts in chat (interactive)**: When the user asks for a graph, chart, or visual trend and you have **concrete numbers** from tools or context, prefer a fenced **`aibm-chart`** block: one JSON object (Chart.js v4) with `type` (`bar`, `line`, `pie`, `doughnut`, `radar`, `polarArea`, `bubble`, or `scatter`), `data` (`labels` and `datasets` with `label`, `data`, optional colors), and optional `options`. The Eli UI renders it with **Chart.js** — tooltips on hover, legend click toggles series, responsive canvas. Optional root key `eli_height` (integer 120–480) sets pixel height. Use ≤12 categories, short ASCII labels, values that **match** prose—never invent data. JSON only — no scripts or HTML in labels. For flowcharts, sequences, or Gantt-style process visuals (not numeric series), you may use **`mermaid`** fences (Mermaid 10.x) instead; those are mostly static. If numbers are uncertain or a chart would mislead, use bullets only.
 - Use **Industry** and **Additional context** from BUSINESS & SCOPE when present; only infer vertical from category/product names when those fields are blank (still label inferences as hypotheses).
 - Personalize occasionally with the user's first name when natural.
@@ -170,6 +180,12 @@ REPORT_RULE;
                         $args = (string) ($tc['function']['arguments'] ?? '{}');
                     }
                     $out = $this->tools->execute($fn, $args, $business_id, $user);
+                    $decoded = json_decode($out, true);
+                    if (is_array($decoded) && isset($decoded['verbatim_block']) && is_string($decoded['verbatim_block']) && $decoded['verbatim_block'] !== '') {
+                        $grids[] = $decoded['verbatim_block'];
+                        unset($decoded['verbatim_block']);
+                        $out = json_encode($decoded);
+                    }
                     $messages[] = [
                         'role' => 'tool',
                         'tool_call_id' => $id,
@@ -185,10 +201,31 @@ REPORT_RULE;
                 return ['reply' => trans('aibusinessmanager::lang.error_generic')];
             }
 
-            return ['reply' => $text];
+            return ['reply' => $this->attachOfficialGrids($text, $grids)];
         }
 
         return ['error' => 'generic', 'details' => 'Tool round limit exceeded'];
+    }
+
+    /**
+     * Drop any table, chart, or amount the model wrote, then attach the tool's database grid.
+     *
+     * @param  list<string>  $grids
+     */
+    protected function attachOfficialGrids(string $text, array $grids): string
+    {
+        if ($grids === []) {
+            return $text;
+        }
+
+        $text = preg_replace('/```aibm-chart\s*\r?\n[\s\S]*?```/i', '', $text) ?? $text;
+        $text = preg_replace('/(?:^|\n)(?:\|[^\n]*\|[ \t]*(?:\n|$)){2,}/', "\n", $text) ?? $text;
+        $text = preg_replace('/(?:¢|₵|GH₵|GHS\s*)\s*[\d,]+(?:\.\d+)?/u', '', $text) ?? $text;
+        $text = preg_replace('/\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b/', '', $text) ?? $text;
+        $text = preg_replace('/[ \t]{2,}/', ' ', $text) ?? $text;
+        $text = trim($text);
+
+        return ($text !== '' ? $text."\n\n" : '').implode("\n\n", $grids);
     }
 
     /**

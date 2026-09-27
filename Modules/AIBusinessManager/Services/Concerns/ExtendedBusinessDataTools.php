@@ -4,6 +4,7 @@ namespace Modules\AIBusinessManager\Services\Concerns;
 
 use App\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 trait ExtendedBusinessDataTools
 {
@@ -217,11 +218,17 @@ trait ExtendedBusinessDataTools
             'currency_code' => $code,
             'currency_symbol' => $symbol,
             'caveat' => 'Excludes standalone contact payments (transaction_payments with no transaction_id). Uses payment date COALESCE(paid_on, created_at).',
-            'rows' => $rows->map(fn ($r) => [
-                'method' => (string) $r->method,
-                'amount' => round((float) $r->amount, $precision),
-                'payment_rows' => (int) $r->payment_rows,
-            ])->values()->all(),
+            'note' => 'Say label to the merchant. method is the stored code; custom_pay_* labels come from the business payment names.',
+            'rows' => $rows->map(function ($r) use ($businessId, $precision) {
+                $method = (string) $r->method;
+
+                return [
+                    'method' => $method,
+                    'label' => $this->paymentMethodLabel($businessId, $method),
+                    'amount' => round((float) $r->amount, $precision),
+                    'payment_rows' => (int) $r->payment_rows,
+                ];
+            })->values()->all(),
         ];
     }
 
@@ -244,15 +251,31 @@ trait ExtendedBusinessDataTools
         $end = $range['end'];
         $location_ids = $range['location_ids'];
 
-        $dirCase = "COALESCE(sal.adjustment_direction, 'decrease')";
-        $qtyInc = "SUM(CASE WHEN {$dirCase} = 'increase' THEN sal.quantity ELSE 0 END)";
-        $qtyDec = "SUM(CASE WHEN {$dirCase} = 'decrease' THEN sal.quantity ELSE 0 END)";
+        $hasDirection = Schema::hasColumn('stock_adjustment_lines', 'adjustment_direction');
+        if ($hasDirection) {
+            $dirCase = "COALESCE(sal.adjustment_direction, 'decrease')";
+            $qtyInc = "SUM(CASE WHEN {$dirCase} = 'increase' THEN sal.quantity ELSE 0 END)";
+            $qtyDec = "SUM(CASE WHEN {$dirCase} = 'decrease' THEN sal.quantity ELSE 0 END)";
+            $qtyDecNormal = "SUM(CASE WHEN {$dirCase} = 'decrease' AND COALESCE(t.adjustment_type, 'normal') <> 'abnormal' THEN sal.quantity ELSE 0 END)";
+            $qtyDecAbnormal = "SUM(CASE WHEN {$dirCase} = 'decrease' AND t.adjustment_type = 'abnormal' THEN sal.quantity ELSE 0 END)";
+            $adjustmentNote = 'Quantities are stock_adjustment_lines.quantity (base units). Null adjustment_direction counts as decrease. qty_decrease_normal is TeamPOS normal (leakage, damage, spoilage, count correction). qty_decrease_abnormal is TeamPOS abnormal (fire, accident, or other unusual loss). Do not call every decrease waste.';
+        } else {
+            $qtyInc = '0';
+            $qtyDec = 'SUM(sal.quantity)';
+            $qtyDecNormal = "SUM(CASE WHEN COALESCE(t.adjustment_type, 'normal') <> 'abnormal' THEN sal.quantity ELSE 0 END)";
+            $qtyDecAbnormal = "SUM(CASE WHEN t.adjustment_type = 'abnormal' THEN sal.quantity ELSE 0 END)";
+            $adjustmentNote = 'This TeamPOS build records stock adjustments as decreases only. qty_decrease_normal is TeamPOS normal (leakage, damage, spoilage, count correction). qty_decrease_abnormal is TeamPOS abnormal (fire, accident, or other unusual loss). Do not call every decrease waste.';
+        }
 
         $base = DB::table('stock_adjustment_lines as sal')
             ->join('transactions as t', 't.id', '=', 'sal.transaction_id')
             ->where('t.business_id', $businessId)
             ->where('t.type', 'stock_adjustment')
-            ->where('t.status', 'received')
+            ->where(function ($q) {
+                $q->where('t.status', 'received')
+                    ->orWhereNull('t.status')
+                    ->orWhere('t.status', '');
+            })
             ->whereBetween('t.transaction_date', [$start, $end])
             ->when($location_ids !== null, fn ($q) => $q->whereIn('t.location_id', $location_ids));
 
@@ -260,6 +283,8 @@ trait ExtendedBusinessDataTools
             $row = (clone $base)
                 ->selectRaw("{$qtyInc} as qty_increase")
                 ->selectRaw("{$qtyDec} as qty_decrease")
+                ->selectRaw("{$qtyDecNormal} as qty_decrease_normal")
+                ->selectRaw("{$qtyDecAbnormal} as qty_decrease_abnormal")
                 ->selectRaw('COUNT(DISTINCT t.id) as adjustments')
                 ->first();
 
@@ -267,10 +292,12 @@ trait ExtendedBusinessDataTools
                 'ok' => true,
                 'granularity' => 'total',
                 'basis' => 'stock_adjustment_received',
-                'note' => 'Quantities are stock_adjustment_lines.quantity (base units). Null adjustment_direction counts as decrease.',
+                'note' => $adjustmentNote,
                 'rows' => [[
                     'qty_increase' => $this->roundQuantity((float) ($row->qty_increase ?? 0)),
                     'qty_decrease' => $this->roundQuantity((float) ($row->qty_decrease ?? 0)),
+                    'qty_decrease_normal' => $this->roundQuantity((float) ($row->qty_decrease_normal ?? 0)),
+                    'qty_decrease_abnormal' => $this->roundQuantity((float) ($row->qty_decrease_abnormal ?? 0)),
                     'adjustments' => (int) ($row->adjustments ?? 0),
                 ]],
             ];
@@ -281,6 +308,8 @@ trait ExtendedBusinessDataTools
                 ->selectRaw("DATE_FORMAT(t.transaction_date, '%Y-%m') as period")
                 ->selectRaw("{$qtyInc} as qty_increase")
                 ->selectRaw("{$qtyDec} as qty_decrease")
+                ->selectRaw("{$qtyDecNormal} as qty_decrease_normal")
+                ->selectRaw("{$qtyDecAbnormal} as qty_decrease_abnormal")
                 ->selectRaw('COUNT(DISTINCT t.id) as adjustments')
                 ->groupBy(DB::raw("DATE_FORMAT(t.transaction_date, '%Y-%m')"))
                 ->orderBy('period')
@@ -291,11 +320,13 @@ trait ExtendedBusinessDataTools
                 'ok' => true,
                 'granularity' => 'month',
                 'basis' => 'stock_adjustment_received',
-                'note' => 'Quantities are stock_adjustment_lines.quantity (base units).',
+                'note' => $adjustmentNote,
                 'rows' => $rows->map(fn ($r) => [
                     'period' => (string) $r->period,
                     'qty_increase' => $this->roundQuantity((float) ($r->qty_increase ?? 0)),
                     'qty_decrease' => $this->roundQuantity((float) ($r->qty_decrease ?? 0)),
+                    'qty_decrease_normal' => $this->roundQuantity((float) ($r->qty_decrease_normal ?? 0)),
+                    'qty_decrease_abnormal' => $this->roundQuantity((float) ($r->qty_decrease_abnormal ?? 0)),
                     'adjustments' => (int) ($r->adjustments ?? 0),
                 ])->values()->all(),
             ];
@@ -305,6 +336,8 @@ trait ExtendedBusinessDataTools
             ->selectRaw('YEAR(t.transaction_date) as period')
             ->selectRaw("{$qtyInc} as qty_increase")
             ->selectRaw("{$qtyDec} as qty_decrease")
+            ->selectRaw("{$qtyDecNormal} as qty_decrease_normal")
+            ->selectRaw("{$qtyDecAbnormal} as qty_decrease_abnormal")
             ->selectRaw('COUNT(DISTINCT t.id) as adjustments')
             ->groupBy(DB::raw('YEAR(t.transaction_date)'))
             ->orderBy('period')
@@ -315,11 +348,13 @@ trait ExtendedBusinessDataTools
             'ok' => true,
             'granularity' => 'year',
             'basis' => 'stock_adjustment_received',
-            'note' => 'Quantities are stock_adjustment_lines.quantity (base units).',
+            'note' => $adjustmentNote,
             'rows' => $rows->map(fn ($r) => [
                 'period' => (string) $r->period,
                 'qty_increase' => $this->roundQuantity((float) ($r->qty_increase ?? 0)),
                 'qty_decrease' => $this->roundQuantity((float) ($r->qty_decrease ?? 0)),
+                'qty_decrease_normal' => $this->roundQuantity((float) ($r->qty_decrease_normal ?? 0)),
+                'qty_decrease_abnormal' => $this->roundQuantity((float) ($r->qty_decrease_abnormal ?? 0)),
                 'adjustments' => (int) ($r->adjustments ?? 0),
             ])->values()->all(),
         ];

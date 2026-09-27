@@ -17,6 +17,8 @@
             font-family: inherit;
             --aibm-float-hex: {{ $aibm_floating_accent_hex ?? '#3c8dbc' }};
             --aibm-float-rgb: {{ $aibm_floating_accent_rgb ?? '60, 141, 188' }};
+            --aibm-accent: {{ $aibm_floating_accent_hex ?? '#3c8dbc' }};
+            --aibm-accent-rgb: {{ $aibm_floating_accent_rgb ?? '60, 141, 188' }};
         }
 
         .aibm-float-panel {
@@ -188,7 +190,7 @@
             border-radius: 14px 14px 14px 4px;
             padding: 10px 12px;
             margin-bottom: 12px;
-            white-space: pre-wrap;
+            white-space: normal;
             word-break: break-word;
             color: #1e293b;
             box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);

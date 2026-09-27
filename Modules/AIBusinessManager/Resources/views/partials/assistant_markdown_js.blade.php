@@ -45,8 +45,80 @@
 }
 
 .aibm-assistant-bubble .aibm-chart-wrap,
-.aibm-float-bubble-ai .aibm-chart-wrap {
+.aibm-float-bubble-ai .aibm-chart-wrap,
+.aibm-chart-wrap {
     box-sizing: border-box;
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+    margin: 12px 0 16px;
+    border-radius: 16px;
+    border: 1px solid rgba(var(--aibm-accent-rgb, 60, 141, 188), 0.22);
+    background: #fff;
+    padding: 12px 10px 6px;
+}
+.aibm-grid-scroll {
+    overflow-x: auto;
+    margin: 12px 0 16px;
+    border-radius: 14px;
+    border: 1px solid rgba(var(--aibm-accent-rgb, 60, 141, 188), 0.22);
+    background: #fff;
+    white-space: normal;
+    word-break: normal;
+}
+.aibm-sheet {
+    display: table;
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+    line-height: 1.35;
+    font-variant-numeric: tabular-nums;
+    white-space: normal;
+    word-break: normal;
+}
+.aibm-sheet th {
+    background: var(--aibm-accent, #3c8dbc);
+    color: #fff;
+    font-weight: 600;
+    text-align: right;
+    padding: 9px 10px;
+    white-space: nowrap;
+}
+.aibm-sheet th:first-child,
+.aibm-sheet td:first-child {
+    text-align: left;
+    position: sticky;
+    left: 0;
+}
+.aibm-sheet th:first-child {
+    background: var(--aibm-accent, #3c8dbc);
+}
+.aibm-sheet td {
+    text-align: right;
+    padding: 8px 10px;
+    white-space: nowrap;
+    border-top: 1px solid rgba(var(--aibm-accent-rgb, 60, 141, 188), 0.1);
+    background: #fff;
+}
+.aibm-sheet td:first-child {
+    background: #fff;
+    font-weight: 600;
+    color: var(--aibm-accent, #3c8dbc);
+}
+.aibm-sheet tbody tr:nth-child(even) td {
+    background: rgba(var(--aibm-accent-rgb, 60, 141, 188), 0.06);
+}
+.aibm-sheet tbody tr:nth-child(even) td:first-child {
+    background: rgba(var(--aibm-accent-rgb, 60, 141, 188), 0.06);
+}
+.aibm-sheet tr.aibm-grid-total td {
+    background: rgba(var(--aibm-accent-rgb, 60, 141, 188), 0.14);
+    font-weight: 700;
+    border-top: 1px solid rgba(var(--aibm-accent-rgb, 60, 141, 188), 0.28);
+}
+.aibm-sheet tr.aibm-grid-total td:first-child {
+    background: rgba(var(--aibm-accent-rgb, 60, 141, 188), 0.14);
+    color: var(--aibm-accent, #3c8dbc);
 }
 </style>
 <script type="text/javascript">
@@ -99,12 +171,60 @@
                 .replace(/`([^`]+)`/g, '<code>$1</code>');
         }
 
-        lines.forEach(function (line) {
+        function isPipeRow(line) {
+            return /^\|.*\|$/.test(line);
+        }
+
+        function isSepRow(line) {
+            return /^\|[\s:\-|]+\|$/.test(line);
+        }
+
+        function splitPipes(line) {
+            var cells = line.replace(/^\|/, '').replace(/\|$/, '').split('|');
+            return cells.map(function (cell) {
+                return cell.trim();
+            });
+        }
+
+        function renderTable(header, body) {
+            var out = '<div class="aibm-grid-scroll"><table class="aibm-sheet"><thead><tr>';
+            header.forEach(function (cell) {
+                out += '<th>' + inlineFormat(cell) + '</th>';
+            });
+            out += '</tr></thead><tbody>';
+            body.forEach(function (row) {
+                var first = (row[0] || '').replace(/\*/g, '').trim().toLowerCase();
+                out += '<tr' + (first === 'total' ? ' class="aibm-grid-total"' : '') + '>';
+                row.forEach(function (cell) {
+                    out += '<td>' + inlineFormat(cell) + '</td>';
+                });
+                out += '</tr>';
+            });
+            out += '</tbody></table></div>';
+            return out;
+        }
+
+        for (var li = 0; li < lines.length; li++) {
+            var line = lines[li];
             var trimmed = line.trim();
             if (!trimmed) {
                 closeLists();
                 html.push('<br>');
-                return;
+                continue;
+            }
+
+            if (isPipeRow(trimmed) && li + 1 < lines.length && isSepRow(lines[li + 1].trim())) {
+                closeLists();
+                var header = splitPipes(trimmed);
+                var body = [];
+                li += 2;
+                while (li < lines.length && isPipeRow(lines[li].trim()) && !isSepRow(lines[li].trim())) {
+                    body.push(splitPipes(lines[li].trim()));
+                    li++;
+                }
+                li--;
+                html.push(renderTable(header, body));
+                continue;
             }
 
             if (/^[-*]\s+/.test(trimmed)) {
@@ -117,7 +237,7 @@
                     inUl = true;
                 }
                 html.push('<li>' + inlineFormat(trimmed.replace(/^[-*]\s+/, '')) + '</li>');
-                return;
+                continue;
             }
 
             if (/^\d+\.\s+/.test(trimmed)) {
@@ -130,7 +250,7 @@
                     inOl = true;
                 }
                 html.push('<li>' + inlineFormat(trimmed.replace(/^\d+\.\s+/, '')) + '</li>');
-                return;
+                continue;
             }
 
             closeLists();
@@ -142,7 +262,7 @@
             } else {
                 html.push('<div>' + inlineFormat(trimmed) + '</div>');
             }
-        });
+        }
 
         closeLists();
         return html.join('');
@@ -211,6 +331,60 @@
         return out.join('');
     };
 
+    w.aibmThemeAccentHex = function () {
+        var el = document.querySelector('.aibm-theme-scope, .aibm-float-wrap');
+        var hex = el ? (window.getComputedStyle(el).getPropertyValue('--aibm-accent') || '').trim() : '';
+        return /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : '#3c8dbc';
+    };
+
+    w.aibmChartPalette = function (accent) {
+        var raw = String(accent || '').replace('#', '');
+        var r = parseInt(raw.slice(0, 2), 16) / 255;
+        var g = parseInt(raw.slice(2, 4), 16) / 255;
+        var b = parseInt(raw.slice(4, 6), 16) / 255;
+        var max = Math.max(r, g, b);
+        var min = Math.min(r, g, b);
+        var light = (max + min) / 2;
+        var sat = 0;
+        var hue = 0;
+        if (max !== min) {
+            var d = max - min;
+            sat = light > 0.5 ? d / (2 - max - min) : d / (max + min);
+            if (max === r) {
+                hue = (g - b) / d + (g < b ? 6 : 0);
+            } else if (max === g) {
+                hue = (b - r) / d + 2;
+            } else {
+                hue = (r - g) / d + 4;
+            }
+            hue /= 6;
+        }
+        function hue2rgb(p, q, t) {
+            if (t < 0) t += 1;
+            if (t > 1) t -= 1;
+            if (t < 1 / 6) return p + (q - p) * 6 * t;
+            if (t < 1 / 2) return q;
+            if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+            return p;
+        }
+        function hslHex(H, S, L) {
+            var q = L < 0.5 ? L * (1 + S) : L + S - L * S;
+            var p = 2 * L - q;
+            var parts = [H + 1 / 3, H, H - 1 / 3].map(function (t) {
+                return Math.round(hue2rgb(p, q, t) * 255).toString(16).padStart(2, '0');
+            });
+            return '#' + parts.join('');
+        }
+        var colors = [accent];
+        var useSat = Math.max(0.45, Math.min(0.72, sat || 0.55));
+        var useLight = Math.max(0.32, Math.min(0.48, light || 0.42));
+        var step;
+        for (step = 1; step < 8; step++) {
+            colors.push(hslHex((hue + step * 0.13) % 1, useSat, useLight));
+        }
+        return colors;
+    };
+
     w.aibmBuildChartConfigFromModel = function (raw) {
         if (!raw || typeof raw !== 'object') {
             return null;
@@ -253,23 +427,138 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 interaction: { mode: 'index', intersect: false },
+                layout: { padding: { top: 6, right: 8, bottom: 0, left: 0 } },
                 plugins: {},
             },
             userOpts
         );
+        var currency = typeof raw.eli_currency === 'string' ? raw.eli_currency : '';
+        var horizontal = options.indexAxis === 'y';
+        var palette = w.aibmChartPalette(w.aibmThemeAccentHex());
+        function fade(hex, alpha) {
+            var h = String(hex).replace('#', '');
+            if (h.length !== 6) {
+                return hex;
+            }
+            var r = parseInt(h.slice(0, 2), 16);
+            var g = parseInt(h.slice(2, 4), 16);
+            var b = parseInt(h.slice(4, 6), 16);
+            return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+        }
+        function compact(v) {
+            var n = Number(v);
+            if (!isFinite(n)) {
+                return String(v);
+            }
+            var abs = Math.abs(n);
+            var body =
+                abs >= 1000000
+                    ? (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'm'
+                    : abs >= 1000
+                      ? (n / 1000).toFixed(abs >= 10000 ? 0 : 1).replace(/\.0$/, '') + 'k'
+                      : String(Math.round(n));
+            return currency ? currency + body : body;
+        }
+        if (data.datasets && data.datasets.length) {
+            data.datasets.forEach(function (ds, i) {
+                var color = palette[i % palette.length];
+                if (t === 'line' || t === 'bar') {
+                    ds.borderColor = color;
+                    ds.backgroundColor = t === 'line' ? fade(color, 0.16) : fade(color, 0.9);
+                    ds.borderWidth = t === 'line' ? 2.5 : 0;
+                    if (t === 'bar') {
+                        ds.borderRadius = 6;
+                        ds.borderSkipped = false;
+                        ds.maxBarThickness = 28;
+                    }
+                    if (t === 'line') {
+                        ds.tension = 0.35;
+                        ds.fill = true;
+                        ds.pointRadius = 3;
+                        ds.pointHoverRadius = 6;
+                        ds.pointBackgroundColor = '#fff';
+                        ds.pointBorderColor = color;
+                        ds.pointBorderWidth = 2;
+                    }
+                } else if (!ds.backgroundColor) {
+                    ds.backgroundColor = palette.slice(0, (ds.data || []).length || palette.length).map(function (c) {
+                        return fade(c, 0.9);
+                    });
+                    ds.borderWidth = 0;
+                }
+            });
+        }
+        function axisStyle(axis, stacked) {
+            var showGrid = horizontal ? axis === 'x' : axis === 'y';
+            return {
+                stacked: !!stacked,
+                beginAtZero: true,
+                grid: { display: showGrid, color: 'rgba(15, 23, 42, 0.08)', drawTicks: false },
+                border: { display: false },
+                ticks: {
+                    color: '#64748b',
+                    padding: 6,
+                    font: { size: 11, family: 'ui-sans-serif, system-ui, sans-serif' },
+                    callback: function (value) {
+                        if (horizontal ? axis === 'y' : axis === 'x') {
+                            return this.getLabelForValue ? this.getLabelForValue(value) : value;
+                        }
+                        return compact(value);
+                    },
+                },
+            };
+        }
+        var modelScales = options.scales && typeof options.scales === 'object' ? options.scales : {};
+        if (t === 'bar' || t === 'line') {
+            options.scales = {
+                x: Object.assign(
+                    axisStyle('x', modelScales.x && modelScales.x.stacked),
+                    { ticks: Object.assign(axisStyle('x', false).ticks, { maxRotation: horizontal ? 0 : 0, autoSkip: true }) }
+                ),
+                y: axisStyle('y', modelScales.y && modelScales.y.stacked),
+            };
+            if (modelScales.x && modelScales.x.stacked) {
+                options.scales.x.stacked = true;
+            }
+            if (modelScales.y && modelScales.y.stacked) {
+                options.scales.y.stacked = true;
+            }
+        }
         options.plugins = Object.assign(
             {
-                legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8 } },
-                tooltip: { enabled: true, intersect: false },
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        usePointStyle: true,
+                        pointStyle: 'circle',
+                        padding: 14,
+                        color: '#1e293b',
+                        boxWidth: 8,
+                        font: { size: 12, family: 'ui-sans-serif, system-ui, sans-serif' },
+                    },
+                },
+                tooltip: {
+                    enabled: true,
+                    intersect: false,
+                    backgroundColor: w.aibmThemeAccentHex(),
+                    titleColor: '#fff',
+                    bodyColor: '#fff',
+                    padding: 10,
+                    cornerRadius: 10,
+                    displayColors: true,
+                    callbacks: {
+                        label: function (ctx) {
+                            var rawV = horizontal ? ctx.parsed.x : ctx.parsed.y;
+                            var shown = currency
+                                ? currency + Number(rawV || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })
+                                : compact(rawV);
+                            return (ctx.dataset.label ? ctx.dataset.label + ': ' : '') + shown;
+                        },
+                    },
+                },
             },
             options.plugins || {}
         );
-        if ((t === 'bar' || t === 'line') && !options.scales) {
-            options.scales = {
-                x: { ticks: { maxRotation: 55, minRotation: 0, autoSkip: true } },
-                y: { beginAtZero: true, grace: '5%' },
-            };
-        }
         return { cfg: { type: t, data: data, options: options }, height: height };
     };
 
@@ -427,8 +716,6 @@
             var jsonStr = w.aibmB64DecodeUnicode(b64);
             var wrap = document.createElement('div');
             wrap.className = 'aibm-chart-wrap';
-            wrap.style.cssText =
-                'position:relative;width:100%;max-width:100%;margin:10px 0;border-radius:10px;border:1px solid rgba(15,23,42,0.08);background:#fff;padding:8px;box-sizing:border-box;';
             var err =
                 '<div style="padding:12px;font-size:12px;color:#b91c1c;">Invalid or unparsable chart.</div>';
             try {
@@ -543,7 +830,7 @@
             });
         }
 
-        if (/```(mermaid|aibm-chart)/i.test(plainText)) {
+        if (/```(mermaid|aibm-chart)/i.test(plainText) || /(^|\n)\|[^\n]+\|\s*\n\|[\s:|-]+\|/m.test(plainText)) {
             revealHtmlAndCharts();
             return;
         }
