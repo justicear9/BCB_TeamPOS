@@ -30,6 +30,8 @@ return [
     'redact_contact_pii' => filter_var(env('AI_BUSINESS_MANAGER_REDACT_CONTACT_PII', false), FILTER_VALIDATE_BOOL),
     'tool_ageing_detail_limit' => (int) env('AI_BUSINESS_MANAGER_TOOL_AGEING_DETAIL_LIMIT', 60),
     'tool_product_search_limit' => (int) env('AI_BUSINESS_MANAGER_TOOL_PRODUCT_SEARCH_LIMIT', 40),
+    'tool_product_metrics_match_limit' => (int) env('AI_BUSINESS_MANAGER_TOOL_PRODUCT_METRICS_MATCH_LIMIT', 15),
+    'tool_product_metrics_combine_limit' => (int) env('AI_BUSINESS_MANAGER_TOOL_PRODUCT_METRICS_COMBINE_LIMIT', 8),
     'tool_transaction_line_limit' => (int) env('AI_BUSINESS_MANAGER_TOOL_TRANSACTION_LINE_LIMIT', 80),
     'tool_cashier_limit' => (int) env('AI_BUSINESS_MANAGER_TOOL_CASHIER_LIMIT', 30),
     'sales_by_cashier_requires_permission' => filter_var(env('AI_BUSINESS_MANAGER_SALES_BY_CASHIER_REQUIRES_PERMISSION', true), FILTER_VALIDATE_BOOL),

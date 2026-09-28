@@ -13,6 +13,7 @@ use Modules\AIBusinessManager\Services\Concerns\ContactAndCatalogTools;
 use Modules\AIBusinessManager\Services\Concerns\ExtendedBusinessDataTools;
 use Modules\AIBusinessManager\Services\Concerns\InventoryIntelligenceTools;
 use Modules\AIBusinessManager\Services\Concerns\LocationSalesMatrixTools;
+use Modules\AIBusinessManager\Services\Concerns\ProductLocationMetricsTool;
 use Modules\AIBusinessManager\Services\Concerns\ReportAlignedTools;
 use Modules\AIBusinessManager\Services\Concerns\SalesReportTool;
 use Modules\AIBusinessManager\Services\Concerns\TransactionAndAnalyticsTools;
@@ -26,6 +27,7 @@ class BusinessDataToolService
     use ExtendedBusinessDataTools;
     use InventoryIntelligenceTools;
     use LocationSalesMatrixTools;
+    use ProductLocationMetricsTool;
     use ReportAlignedTools;
     use SalesReportTool;
     use TransactionAndAnalyticsTools;
@@ -145,7 +147,7 @@ class BusinessDataToolService
                 'type' => 'function',
                 'function' => [
                     'name' => 'sales_by_product_location',
-                    'description' => 'Product sales split by location for the date range. Each row has revenue_by_location and quantity_by_location. Omit dates for 1 January through today. Set by_month true only when the merchant wants each product split by month as well. Optional name_query filters one product name.',
+                    'description' => 'Product sales split by location for the date range. Each row has revenue_by_location and quantity_by_location. Omit dates for 1 January through today. Set by_month true only when the merchant wants each product split by month as well. Optional name_query filters one product name. For average qty at a branch, prefer product_location_metrics.',
                     'parameters' => [
                         'type' => 'object',
                         'properties' => [
@@ -163,8 +165,33 @@ class BusinessDataToolService
             [
                 'type' => 'function',
                 'function' => [
+                    'name' => 'product_location_metrics',
+                    'description' => 'CEO metrics from live TeamPOS sales: average and total quantity at a branch. Prefer unit_query for countable units — “loaves” is a UNIT equal to Pc/Pcs (not a product name); that sums every product sold in the loaf/Pc family. Or pass product_id / name_query / category_query. Pass location_id or location_name. avg_basis calendar_day (default) or selling_day. include_all_locations ranks branches. Quote avg_quantity and advise. Read-only.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'start_date' => ['type' => 'string'],
+                            'end_date' => ['type' => 'string'],
+                            'location_id' => ['type' => 'integer'],
+                            'location_name' => ['type' => 'string', 'description' => 'Substring match on business_locations.name among permitted locations.'],
+                            'product_id' => ['type' => 'integer'],
+                            'name_query' => ['type' => 'string', 'description' => 'Product/variation name or SKU substring. If this is only “loaf/loaves/Pc”, it is treated as unit_query.'],
+                            'unit_query' => ['type' => 'string', 'description' => 'Selling unit family, e.g. loaves, Pc, Pcs. Loaf ≡ Pc. Aggregates all products sold in that family.'],
+                            'category_query' => ['type' => 'string', 'description' => 'Substring on product category name.'],
+                            'avg_basis' => ['type' => 'string', 'enum' => ['calendar_day', 'selling_day']],
+                            'compare_prior_period' => ['type' => 'boolean'],
+                            'include_all_locations' => ['type' => 'boolean'],
+                            'combine_matching_products' => ['type' => 'boolean'],
+                        ],
+                        'required' => [],
+                    ],
+                ],
+            ],
+            [
+                'type' => 'function',
+                'function' => [
                     'name' => 'sales_report',
-                    'description' => 'Read-only sales view for this business. Pick group_by from month, day, weekday, location, product, category (one to three). Invoice revenue unless product or category is included, then sell-line revenue. Always limited to this business and the user locations. Omit dates for 1 January through today. Do not write the table or any amount; the app attaches the result.',
+                    'description' => 'Read-only sales view for this business. Pick group_by from month, day, weekday, location, product, category (one to three). Invoice revenue unless product or category is included, then sell-line revenue. Always limited to this business and the user locations. Omit dates for 1 January through today. The app attaches the grid; you may quote figures when advising. For average qty at a branch prefer product_location_metrics.',
                     'parameters' => [
                         'type' => 'object',
                         'properties' => [
@@ -930,6 +957,7 @@ class BusinessDataToolService
             'revenue_by_location' => json_encode($this->revenueByLocation($args, $businessId, $user)),
             'sales_by_location_month' => json_encode($this->salesByLocationMonth($args, $businessId, $user)),
             'sales_by_product_location' => json_encode($this->salesByProductLocation($args, $businessId, $user)),
+            'product_location_metrics' => json_encode($this->productLocationMetrics($args, $businessId, $user)),
             'sales_report' => json_encode($this->salesReport($args, $businessId, $user)),
             'purchase_aggregate' => json_encode($this->purchaseAggregate($args, $businessId, $user)),
             'expense_aggregate' => json_encode($this->expenseAggregate($args, $businessId, $user)),
@@ -2039,12 +2067,17 @@ class BusinessDataToolService
         $products = (int) $this->sellLinesInRangeQuery($businessId, $location_ids, $start, $end)
             ->selectRaw('COUNT(DISTINCT tsl.product_id) as c')
             ->value('c');
-        $mixed = count($byUnit) > 1;
+
+        $families = [];
+        foreach ($byUnit as $row) {
+            $families[\Modules\AIBusinessManager\Support\UnitAlias::family((string) ($row['unit'] ?? 'unit'))] = true;
+        }
+        $mixed = count($families) > 1;
         $note = null;
         if ($mixed) {
-            $note = 'quantity_selling_uom adds every unit together. Quote quantity_by_unit instead of that sum.';
+            $note = 'quantity_selling_uom adds every unit together. Quote quantity_by_unit instead of that sum. Loaves and Pc/Pcs are the same family and may be combined.';
         } elseif ($products > 1) {
-            $note = 'quantity_selling_uom adds every product sold in this unit. Do not describe the total as one product.';
+            $note = 'quantity_selling_uom adds every product sold in this unit family. Do not describe the total as one product.';
         }
 
         return [
