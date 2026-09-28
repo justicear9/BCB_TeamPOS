@@ -6,9 +6,11 @@ use App\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Modules\AIBusinessManager\Support\ProductLocationMetricsMath;
+use Modules\AIBusinessManager\Support\UnitAlias;
 
 /**
- * CEO-style product × location averages and branch comparisons.
+ * CEO-style product / unit × location averages and branch comparisons.
+ * “Loaves” is treated as a selling unit (same family as Pc / Pcs), not a product name.
  */
 trait ProductLocationMetricsTool
 {
@@ -54,31 +56,63 @@ trait ProductLocationMetricsTool
         /** @var list<int>|null $queryLocationIds */
         $queryLocationIds = $locationResolution['query_location_ids'];
 
-        $productResolution = $this->resolveMetricsProducts($args, $businessId);
-        if (isset($productResolution['ok']) && $productResolution['ok'] === false) {
-            return $productResolution;
-        }
-        if (! empty($productResolution['ambiguous'])) {
-            return $productResolution;
-        }
-        if (isset($productResolution['products']) && $productResolution['products'] === []) {
-            return [
-                'ok' => true,
-                'ambiguous' => false,
-                'products' => [],
-                'total_quantity' => 0,
-                'avg_quantity' => null,
-                'note' => (string) ($productResolution['note'] ?? 'No product matched.'),
-            ];
-        }
-
-        /** @var list<array{product_id: int, product_name: string}> $products */
-        $products = $productResolution['products'];
-        $productIds = array_map(fn ($p) => $p['product_id'], $products);
-
         $scopeLocationIds = $queryLocationIds;
         if ($focusLocationId !== null) {
             $scopeLocationIds = [$focusLocationId];
+        }
+
+        $unitQuery = isset($args['unit_query']) ? trim((string) $args['unit_query']) : '';
+        $nameQuery = isset($args['name_query']) ? trim((string) $args['name_query']) : '';
+        $productIdArg = isset($args['product_id']) ? (int) $args['product_id'] : 0;
+        $categoryQuery = isset($args['category_query']) ? trim((string) $args['category_query']) : '';
+
+        // “average loaves at Airport” → unit_query, not a product named loaves.
+        if ($unitQuery === '' && $productIdArg <= 0 && $categoryQuery === '' && $nameQuery !== '' && UnitAlias::looksLikeUnitQuery($nameQuery)) {
+            $unitQuery = $nameQuery;
+            $nameQuery = '';
+            $args['name_query'] = '';
+            $args['unit_query'] = $unitQuery;
+        }
+
+        $productIds = null;
+        $products = [];
+        $scopeLabel = '';
+
+        if ($unitQuery !== '') {
+            $scopeLabel = 'unit:'.UnitAlias::displayLabel($unitQuery);
+        } else {
+            $productResolution = $this->resolveMetricsProducts($args, $businessId);
+            if (isset($productResolution['ok']) && $productResolution['ok'] === false) {
+                return $productResolution;
+            }
+            if (! empty($productResolution['ambiguous'])) {
+                return $productResolution;
+            }
+            if (isset($productResolution['products']) && $productResolution['products'] === []) {
+                return [
+                    'ok' => true,
+                    'ambiguous' => false,
+                    'products' => [],
+                    'total_quantity' => 0,
+                    'avg_quantity' => null,
+                    'note' => (string) ($productResolution['note'] ?? 'No product matched. If you meant a unit (loaves / Pc), pass unit_query.'),
+                ];
+            }
+
+            /** @var list<array{product_id: int, product_name: string}> $products */
+            $products = $productResolution['products'];
+            $productIds = array_map(fn ($p) => $p['product_id'], $products);
+            $scopeLabel = count($products) === 1
+                ? $products[0]['product_name']
+                : (count($products).' products');
+        }
+
+        if ($unitQuery === '' && ($productIds === null || $productIds === [])) {
+            return [
+                'ok' => false,
+                'error' => 'missing_product_or_unit_query',
+                'note' => 'Pass product_id, name_query, category_query, or unit_query (e.g. loaves, Pc).',
+            ];
         }
 
         $primary = $this->aggregateProductLocationSales(
@@ -86,7 +120,8 @@ trait ProductLocationMetricsTool
             $productIds,
             $scopeLocationIds,
             $start,
-            $end
+            $end,
+            $unitQuery !== '' ? $unitQuery : null
         );
 
         if ($primary['unit_conflict']) {
@@ -95,7 +130,7 @@ trait ProductLocationMetricsTool
                 'error' => 'mixed_units',
                 'products' => $products,
                 'units_seen' => $primary['units_seen'],
-                'note' => 'Matched products use different selling units. Pick one product_id, or narrow name_query / category_query. Do not combine totals across different units.',
+                'note' => 'Matched rows use incompatible selling units (loaves/Pc are treated as the same family). Narrow the query.',
             ];
         }
 
@@ -106,11 +141,18 @@ trait ProductLocationMetricsTool
         $avgQty = ProductLocationMetricsMath::averageQuantity($totalQty, $daysInRange, $sellingDays, $avgBasis);
         $avgRev = ProductLocationMetricsMath::averageQuantity($totalRev, $daysInRange, $sellingDays, $avgBasis);
 
+        $displayUnit = $unitQuery !== ''
+            ? UnitAlias::displayLabel($unitQuery)
+            : ($primary['unit'] !== '' ? $primary['unit'] : 'unit');
+
         $result = [
             'ok' => true,
             'ambiguous' => false,
             'currency_symbol' => $symbol,
-            'unit' => $primary['unit'],
+            'unit' => $displayUnit,
+            'unit_family' => $unitQuery !== '' ? UnitAlias::family($unitQuery) : UnitAlias::family($primary['unit']),
+            'unit_query' => $unitQuery !== '' ? $unitQuery : null,
+            'scope' => $scopeLabel,
             'avg_basis' => $avgBasis,
             'start' => $start->toDateString(),
             'end' => $end->toDateString(),
@@ -124,13 +166,14 @@ trait ProductLocationMetricsTool
             'product_id' => count($products) === 1 ? $products[0]['product_id'] : null,
             'product_name' => count($products) === 1
                 ? $products[0]['product_name']
-                : (count($products).' products (same unit)'),
+                : ($unitQuery !== ''
+                    ? 'All products sold in '.$displayUnit.' (Pc / loaf family treated as one)'
+                    : (count($products).' products (compatible units)')),
+            'product_count' => $primary['product_count'],
             'location_id' => $focusLocationId,
             'location_name' => $focusLocationName,
-            'note' => $avgBasis === 'selling_day'
-                ? 'avg_quantity = total_quantity / selling_days (days with ≥1 finalized sale of these products in scope). Quote avg_quantity, unit, location, and date range.'
-                : 'avg_quantity = total_quantity / days_in_range (inclusive calendar days). Quote avg_quantity, unit, location, and date range. Use avg_basis selling_day if the merchant means average on days that sold.',
-            'caveat' => 'Quantity is invoice selling UoM (TeamPOS sub-unit). Guidance only — not a bake/order confirmation.',
+            'note' => $this->metricsNote($avgBasis, $unitQuery !== ''),
+            'caveat' => 'Quantity is invoice selling UoM. Loaf/loaves and Pc/Pcs are the same countable family. Guidance only — not a bake/order confirmation. Read-only: never add/edit/delete TeamPOS records.',
         ];
 
         if ($comparePrior) {
@@ -140,7 +183,8 @@ trait ProductLocationMetricsTool
                 $productIds,
                 $scopeLocationIds,
                 $priorStart,
-                $priorEnd
+                $priorEnd,
+                $unitQuery !== '' ? $unitQuery : null
             );
             $priorDays = ProductLocationMetricsMath::daysInRangeInclusive($priorStart, $priorEnd);
             $priorAvg = ProductLocationMetricsMath::averageQuantity(
@@ -162,8 +206,7 @@ trait ProductLocationMetricsTool
 
         $wantSiblings = $includeAllLocations || $focusLocationId !== null;
         if ($wantSiblings) {
-            $siblingScope = $permittedLocationIds;
-            $locations = $this->visibleLocations($businessId, $siblingScope);
+            $locations = $this->visibleLocations($businessId, $permittedLocationIds);
             $siblings = [];
             foreach ($locations as $loc) {
                 $lid = (int) $loc->id;
@@ -172,7 +215,8 @@ trait ProductLocationMetricsTool
                     $productIds,
                     [$lid],
                     $start,
-                    $end
+                    $end,
+                    $unitQuery !== '' ? $unitQuery : null
                 );
                 $siblings[] = [
                     'location_id' => $lid,
@@ -193,6 +237,18 @@ trait ProductLocationMetricsTool
         }
 
         return $result;
+    }
+
+    protected function metricsNote(string $avgBasis, bool $byUnit): string
+    {
+        $basis = $avgBasis === 'selling_day'
+            ? 'avg_quantity = total_quantity / selling_days (days with ≥1 matching finalized sale).'
+            : 'avg_quantity = total_quantity / days_in_range (inclusive calendar days).';
+        $unit = $byUnit
+            ? ' Scope is selling-unit family (loaves ≡ Pc/Pcs). Totals include every product sold in that family at the location.'
+            : ' Scope is the resolved product(s).';
+
+        return $basis.$unit.' Quote avg_quantity, unit, location, and date range; then advise from the numbers.';
     }
 
     /**
@@ -258,14 +314,6 @@ trait ProductLocationMetricsTool
                 'location_id' => $matches[0]['location_id'],
                 'location_name' => $matches[0]['location_name'],
                 'query_location_ids' => [$matches[0]['location_id']],
-            ];
-        }
-
-        if ($includeAllLocations) {
-            return [
-                'location_id' => null,
-                'location_name' => null,
-                'query_location_ids' => $permittedLocationIds,
             ];
         }
 
@@ -351,7 +399,7 @@ trait ProductLocationMetricsTool
         if ($matches->isEmpty()) {
             return [
                 'products' => [],
-                'note' => 'No product matched. Try a shorter name_query, category_query, or pass product_id.',
+                'note' => 'No product matched. If the merchant meant the unit loaves/Pc, call again with unit_query.',
             ];
         }
 
@@ -367,7 +415,7 @@ trait ProductLocationMetricsTool
                     'product_id' => (int) $m->product_id,
                     'product_name' => (string) $m->product_name,
                 ])->values()->all(),
-                'note' => 'Several products matched. Call again with product_id, or set combine_matching_products true when they share one selling unit (e.g. all loaves).',
+                'note' => 'Several products matched. Call with product_id, combine_matching_products true (same unit family), or unit_query (e.g. loaves) to sum everything sold in that unit.',
             ];
         }
 
@@ -380,7 +428,7 @@ trait ProductLocationMetricsTool
                     'product_id' => (int) $m->product_id,
                     'product_name' => (string) $m->product_name,
                 ])->values()->all(),
-                'note' => 'Too many products to combine safely. Narrow name_query / category_query or pick product_id.',
+                'note' => 'Too many products to combine safely. Prefer unit_query (loaves/Pc) or narrow name_query / category_query.',
             ];
         }
 
@@ -393,18 +441,19 @@ trait ProductLocationMetricsTool
     }
 
     /**
-     * @param  list<int>  $productIds
+     * @param  list<int>|null  $productIds  Null = any product (unit filter required)
      * @param  list<int>|null  $locationIds
-     * @return array{total_quantity: float, total_revenue: float, selling_days: int, unit: string, units_seen: list<string>, unit_conflict: bool}
+     * @return array{total_quantity: float, total_revenue: float, selling_days: int, unit: string, units_seen: list<string>, unit_conflict: bool, product_count: int}
      */
     protected function aggregateProductLocationSales(
         int $businessId,
-        array $productIds,
+        ?array $productIds,
         ?array $locationIds,
         Carbon $start,
-        Carbon $end
+        Carbon $end,
+        ?string $unitQuery = null
     ): array {
-        if ($productIds === []) {
+        if ($productIds !== null && $productIds === [] && ($unitQuery === null || $unitQuery === '')) {
             return [
                 'total_quantity' => 0.0,
                 'total_revenue' => 0.0,
@@ -412,6 +461,7 @@ trait ProductLocationMetricsTool
                 'unit' => 'unit',
                 'units_seen' => [],
                 'unit_conflict' => false,
+                'product_count' => 0,
             ];
         }
 
@@ -419,19 +469,26 @@ trait ProductLocationMetricsTool
         $unitExpr = 'COALESCE(NULLIF(TRIM(sell_unit.short_name), ""), NULLIF(TRIM(base_u.short_name), ""), "unit")';
         $lineValue = 'tsl.quantity * COALESCE(tsl.unit_price_inc_tax, tsl.unit_price, 0)';
 
-        $totals = $this->sellLinesInRangeQuery($businessId, $locationIds, $start, $end)
+        $base = $this->sellLinesInRangeQuery($businessId, $locationIds, $start, $end)
             ->join('products as p', 'p.id', '=', 'tsl.product_id')
-            ->leftJoin('units as base_u', 'base_u.id', '=', 'p.unit_id')
-            ->whereIn('tsl.product_id', $productIds)
+            ->leftJoin('units as base_u', 'base_u.id', '=', 'p.unit_id');
+
+        if ($productIds !== null) {
+            $base->whereIn('tsl.product_id', $productIds);
+        }
+
+        if ($unitQuery !== null && $unitQuery !== '') {
+            $this->applyUnitFamilyFilter($base, $unitQuery);
+        }
+
+        $totals = (clone $base)
             ->selectRaw('SUM('.$qtySql.') as quantity')
             ->selectRaw('SUM('.$lineValue.') as revenue')
             ->selectRaw('COUNT(DISTINCT DATE(t.transaction_date)) as selling_days')
+            ->selectRaw('COUNT(DISTINCT tsl.product_id) as product_count')
             ->first();
 
-        $unitRows = $this->sellLinesInRangeQuery($businessId, $locationIds, $start, $end)
-            ->join('products as p', 'p.id', '=', 'tsl.product_id')
-            ->leftJoin('units as base_u', 'base_u.id', '=', 'p.unit_id')
-            ->whereIn('tsl.product_id', $productIds)
+        $unitRows = (clone $base)
             ->groupBy(DB::raw($unitExpr))
             ->selectRaw($unitExpr.' as unit')
             ->pluck('unit')
@@ -439,7 +496,7 @@ trait ProductLocationMetricsTool
             ->values()
             ->all();
 
-        if ($unitRows === []) {
+        if ($unitRows === [] && $productIds !== null && $productIds !== []) {
             $catalogUnits = DB::table('products as p')
                 ->leftJoin('units as base_u', 'base_u.id', '=', 'p.unit_id')
                 ->where('p.business_id', $businessId)
@@ -453,6 +510,10 @@ trait ProductLocationMetricsTool
             $unitRows = $catalogUnits !== [] ? $catalogUnits : ['unit'];
         }
 
+        if ($unitRows === [] && $unitQuery !== null && $unitQuery !== '') {
+            $unitRows = [UnitAlias::displayLabel($unitQuery)];
+        }
+
         $conflict = ! ProductLocationMetricsMath::unitsAreCompatible($unitRows);
 
         return [
@@ -462,6 +523,37 @@ trait ProductLocationMetricsTool
             'unit' => (string) ($unitRows[0] ?? 'unit'),
             'units_seen' => array_values(array_unique($unitRows)),
             'unit_conflict' => $conflict,
+            'product_count' => (int) ($totals->product_count ?? 0),
         ];
+    }
+
+    /**
+     * Restrict sell lines to a unit family (loaf ≡ Pc).
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     */
+    protected function applyUnitFamilyFilter($query, string $unitQuery): void
+    {
+        $needles = UnitAlias::sqlMatchNeedles($unitQuery);
+        $query->where(function ($w) use ($needles) {
+            foreach ($needles as $needle) {
+                $like = '%'.addcslashes($needle, '%_\\').'%';
+                $w->orWhere('sell_unit.short_name', 'like', $like)
+                    ->orWhere('sell_unit.actual_name', 'like', $like)
+                    ->orWhere('base_u.short_name', 'like', $like)
+                    ->orWhere('base_u.actual_name', 'like', $like);
+            }
+            // Lines with no sub-unit that still sell in piece family via empty unit → treat blank as Pc when querying piece family
+            if (UnitAlias::family($unitQuery) === UnitAlias::FAMILY_PIECE) {
+                $w->orWhere(function ($blank) {
+                    $blank->whereNull('tsl.sub_unit_id')
+                        ->where(function ($b) {
+                            $b->whereNull('base_u.short_name')
+                                ->orWhere('base_u.short_name', '')
+                                ->orWhereRaw('LOWER(TRIM(base_u.short_name)) in ("pc","pcs","pc(s)","piece","pieces","loaf","loaves","unit","units","ea","each")');
+                        });
+                });
+            }
+        });
     }
 }

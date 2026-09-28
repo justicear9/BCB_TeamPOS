@@ -166,7 +166,7 @@ class BusinessDataToolService
                 'type' => 'function',
                 'function' => [
                     'name' => 'product_location_metrics',
-                    'description' => 'CEO metrics: average and total quantity (invoice selling UoM) for a product at a branch over a date range. Use for “average loaves sold at Airport”, per-day averages, prior-period change, and branch comparison. Pass product_id or name_query (and optional category_query). Pass location_id or location_name. avg_basis calendar_day (default) or selling_day. Set include_all_locations true to rank every permitted branch. Set combine_matching_products true only when several same-unit products should be summed (e.g. all loaf SKUs). Quote avg_quantity and advise from the numbers — do not invent figures.',
+                    'description' => 'CEO metrics from live TeamPOS sales: average and total quantity at a branch. Prefer unit_query for countable units — “loaves” is a UNIT equal to Pc/Pcs (not a product name); that sums every product sold in the loaf/Pc family. Or pass product_id / name_query / category_query. Pass location_id or location_name. avg_basis calendar_day (default) or selling_day. include_all_locations ranks branches. Quote avg_quantity and advise. Read-only.',
                     'parameters' => [
                         'type' => 'object',
                         'properties' => [
@@ -175,7 +175,8 @@ class BusinessDataToolService
                             'location_id' => ['type' => 'integer'],
                             'location_name' => ['type' => 'string', 'description' => 'Substring match on business_locations.name among permitted locations.'],
                             'product_id' => ['type' => 'integer'],
-                            'name_query' => ['type' => 'string', 'description' => 'Substring on product/variation name or sub_sku.'],
+                            'name_query' => ['type' => 'string', 'description' => 'Product/variation name or SKU substring. If this is only “loaf/loaves/Pc”, it is treated as unit_query.'],
+                            'unit_query' => ['type' => 'string', 'description' => 'Selling unit family, e.g. loaves, Pc, Pcs. Loaf ≡ Pc. Aggregates all products sold in that family.'],
                             'category_query' => ['type' => 'string', 'description' => 'Substring on product category name.'],
                             'avg_basis' => ['type' => 'string', 'enum' => ['calendar_day', 'selling_day']],
                             'compare_prior_period' => ['type' => 'boolean'],
@@ -2066,12 +2067,17 @@ class BusinessDataToolService
         $products = (int) $this->sellLinesInRangeQuery($businessId, $location_ids, $start, $end)
             ->selectRaw('COUNT(DISTINCT tsl.product_id) as c')
             ->value('c');
-        $mixed = count($byUnit) > 1;
+
+        $families = [];
+        foreach ($byUnit as $row) {
+            $families[\Modules\AIBusinessManager\Support\UnitAlias::family((string) ($row['unit'] ?? 'unit'))] = true;
+        }
+        $mixed = count($families) > 1;
         $note = null;
         if ($mixed) {
-            $note = 'quantity_selling_uom adds every unit together. Quote quantity_by_unit instead of that sum.';
+            $note = 'quantity_selling_uom adds every unit together. Quote quantity_by_unit instead of that sum. Loaves and Pc/Pcs are the same family and may be combined.';
         } elseif ($products > 1) {
-            $note = 'quantity_selling_uom adds every product sold in this unit. Do not describe the total as one product.';
+            $note = 'quantity_selling_uom adds every product sold in this unit family. Do not describe the total as one product.';
         }
 
         return [

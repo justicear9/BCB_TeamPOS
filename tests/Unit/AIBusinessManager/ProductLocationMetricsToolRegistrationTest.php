@@ -28,7 +28,7 @@ class ProductLocationMetricsToolRegistrationTest extends TestCase
     public function test_units_compatible_helper_via_math_class_used_by_tool(): void
     {
         $this->assertTrue(
-            \Modules\AIBusinessManager\Support\ProductLocationMetricsMath::unitsAreCompatible(['loaf', 'Loaf'])
+            \Modules\AIBusinessManager\Support\ProductLocationMetricsMath::unitsAreCompatible(['loaf', 'Pc'])
         );
         $this->assertFalse(
             \Modules\AIBusinessManager\Support\ProductLocationMetricsMath::unitsAreCompatible(['loaf', 'kg'])

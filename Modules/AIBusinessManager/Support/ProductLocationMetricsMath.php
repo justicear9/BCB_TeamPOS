@@ -44,16 +44,7 @@ final class ProductLocationMetricsMath
      */
     public static function unitsAreCompatible(array $units): bool
     {
-        $normalized = [];
-        foreach ($units as $unit) {
-            $u = strtolower(trim((string) $unit));
-            if ($u === '') {
-                $u = 'unit';
-            }
-            $normalized[$u] = true;
-        }
-
-        return count($normalized) <= 1;
+        return UnitAlias::unitsAreCompatible($units);
     }
 
     /**

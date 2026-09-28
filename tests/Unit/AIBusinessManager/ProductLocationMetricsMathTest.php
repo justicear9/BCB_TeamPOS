@@ -39,7 +39,8 @@ class ProductLocationMetricsMathTest extends TestCase
     public function test_units_compatible_when_same_ignoring_case(): void
     {
         $this->assertTrue(ProductLocationMetricsMath::unitsAreCompatible(['Loaf', 'loaf', ' LOAF ']));
-        $this->assertFalse(ProductLocationMetricsMath::unitsAreCompatible(['Loaf', 'Pc']));
+        $this->assertTrue(ProductLocationMetricsMath::unitsAreCompatible(['loaves', 'Pc', 'Pcs']));
+        $this->assertFalse(ProductLocationMetricsMath::unitsAreCompatible(['Loaf', 'kg']));
     }
 
     public function test_prior_period_same_length_ending_day_before_start(): void
