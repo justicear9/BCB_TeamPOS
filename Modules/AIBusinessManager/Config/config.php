@@ -32,6 +32,15 @@ return [
     'tool_product_search_limit' => (int) env('AI_BUSINESS_MANAGER_TOOL_PRODUCT_SEARCH_LIMIT', 40),
     'tool_product_metrics_match_limit' => (int) env('AI_BUSINESS_MANAGER_TOOL_PRODUCT_METRICS_MATCH_LIMIT', 15),
     'tool_product_metrics_combine_limit' => (int) env('AI_BUSINESS_MANAGER_TOOL_PRODUCT_METRICS_COMBINE_LIMIT', 8),
+
+    /*
+    | Business manager: remove reply figures that cannot be traced to data, morning brief in the chat,
+    | forecast snapshots for accuracy scoring, and what an unsold loaf is worth (% of price) in bake quantities.
+    */
+    'figure_guard' => filter_var(env('AI_BUSINESS_MANAGER_FIGURE_GUARD', true), FILTER_VALIDATE_BOOL),
+    'daily_brief_enabled' => filter_var(env('AI_BUSINESS_MANAGER_DAILY_BRIEF', true), FILTER_VALIDATE_BOOL),
+    'save_forecasts' => filter_var(env('AI_BUSINESS_MANAGER_SAVE_FORECASTS', true), FILTER_VALIDATE_BOOL),
+    'forecast_leftover_value_pct' => (float) env('AI_BUSINESS_MANAGER_LEFTOVER_VALUE_PCT', 25),
     'tool_transaction_line_limit' => (int) env('AI_BUSINESS_MANAGER_TOOL_TRANSACTION_LINE_LIMIT', 80),
     'tool_cashier_limit' => (int) env('AI_BUSINESS_MANAGER_TOOL_CASHIER_LIMIT', 30),
     'sales_by_cashier_requires_permission' => filter_var(env('AI_BUSINESS_MANAGER_SALES_BY_CASHIER_REQUIRES_PERMISSION', true), FILTER_VALIDATE_BOOL),

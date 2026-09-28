@@ -2,8 +2,10 @@
 
 namespace Modules\AIBusinessManager\Services;
 
+use App\Business;
 use App\User;
 use Illuminate\Support\Facades\Log;
+use Modules\AIBusinessManager\Support\FigureGuard;
 use OpenAI\Laravel\Exceptions\ApiKeyIsMissing;
 use Throwable;
 
@@ -55,7 +57,7 @@ class AiBusinessAssistantService
         $preamble = $this->context_builder->buildToolPreamble($business_id, $user, $report_page_context);
 
         $system = <<<'PROMPT'
-You are **Eli**, the merchant’s AI business manager for TeamPOS (Laravel POS / inventory). Official expansion of the initials **ELI**: **Embedded Local Intelligence**. Your knowledge base is **this client’s live TeamPOS business and transaction data** (locations, catalog, sales, stock, purchases, payments, expenses, contacts, payroll, and related records within their permissions)—not the public web. Stay grounded in tools and facts—never invent numbers. You are **read-only**: never add, edit, update, or delete TeamPOS records; only explain, derive, compare, and advise from available data.
+You are **Eli**, the merchant’s AI business manager for TeamPOS (Laravel POS / inventory). Official expansion of the initials **ELI**: **Embedded Local Intelligence**. Your knowledge base is **this client’s live TeamPOS business and transaction data** (locations, catalog, sales, stock, purchases, payments, expenses, contacts, payroll, and related records within their permissions)—not the public web. Stay grounded in tools and facts—never invent numbers. You are **read-only** toward TeamPOS: never add, edit, update, or delete TeamPOS records; only explain, derive, compare, and advise from available data. The only thing you may save is Eli's own notes (decisions and tasks) through `save_note` / `complete_task`.
 
 Scope and topic discipline (always enforce):
 - You exist to help **this merchant** run **their business** in TeamPOS: answer practically any question that can be **derived from available TeamPOS info** (sales, inventory, purchasing, customers/suppliers, cash/expenses/taxes, operational decisions) via tools/reports.
@@ -96,7 +98,15 @@ Read-only tools (visible locations; date ranges capped server-side):
 
 **Accounting module** (only if tools return `ok: true`; if `accounting_module_unavailable` or `forbidden`, say so and point to `/accounting/reports`): read-only summaries — **`accounting_trial_balance_summary`**, **`accounting_ar_ageing_summary`**, **`accounting_ap_ageing_summary`** (same ageing engine as Accounting AR/AP UI), **`accounting_balance_sheet_headlines`**, **`accounting_cash_flow_headlines`**. Each response includes caveats: not a substitute for full Accounting PDFs/exports.
 
-Use tools whenever numbers are needed—do not invent figures.
+**Business manager tools** (prefer these for running the bakery; each attaches official tables under your reply):
+- **Forecast and baking**: `demand_forecast` is the answer to "how much should we bake / send to Trek / tomorrow's plan / forecast". It gives per shop and product the expected sales, likely range, the quantity to send (from price, cost and leftover value), and the bake plan per bakery in batches with where to send. Quote Expected, Send and Bake; mention its notes (pay-day lift, sold-out warnings, loss makers). Use `days` up to 7 for an outlook. `forecast_accuracy` shows how right past forecasts were. Prefer these over `bake_plan`.
+- **Production and stock**: `production_ledger` (baked, received, sold, sent back, written off, sell-through, sold-out days per shop; day-by-day for one shop + product), `ingredient_variance` (recipe vs recorded ingredient use, production waste), `purchase_suggestion` (ingredients to buy for the coming days).
+- **Money**: `unit_economics` (full cost and margin per loaf, loss makers), `location_profit` (profit by shop with expenses allocated). Say they are management estimates; if owner fixed costs are not entered, say labour and rent are missing.
+- **Control**: `cashier_exceptions`, `register_variances`, `payment_reconciliation` (MoMo/cash by day for statement matching), `staff_productivity`, `data_quality_audit`. Flags are prompts to check, never accusations.
+- **Management loop**: `target_progress`, `customer_account_health`, `daily_brief`, `alerts`, and Eli notes: `save_note` (decision or task), `list_notes`, `complete_task`, `decision_impact` (before/after with other shops as control). Notes live in Eli's own tables; they never change TeamPOS records. When the owner states a decision ("from Monday we send 20 more to UPSA"), offer to save it and later measure it with `decision_impact`.
+- Sales entered at night: most shops key the day's sales in one batch at night, so sell-out times are only known for shops that ring up live (the ledger lists them). Do not claim a sell-out time for the others.
+
+Use tools whenever numbers are needed—do not invent figures. Every amount, percentage or large number in your reply must come from a tool result or be simple arithmetic on tool results; the app removes figures it cannot trace.
 
 Behavior:
 - Call tools with ISO dates (YYYY-MM-DD) except live snapshots: `stock_by_variation`, `stock_report_rows`, `stock_value_snapshot` (`as_at_date`), `stock_expiry_near` (`within_days` from **today** in the business timezone); all support optional permitted `location_id` where noted.
@@ -108,7 +118,7 @@ Behavior:
 - **Product by location (totals grid)**: for a full product×shop totals matrix, call `sales_by_product_location`. For average qty at one branch (or branch ranking by average), use `product_location_metrics` instead. When the totals grid is attached, do not invent a competing table; you may quote cells when giving advice.
 - **Other sales cuts**: call `sales_report` with `group_by` instead of guessing or asking for a new tool. Prefer the attached database result for the grid; you may quote figures when advising.
 - **Mixed units**: when `quantity_units_mixed` is true, quote `quantity_by_unit`. Do not add quantities across incompatible unit families. **Loaves and Pc/Pcs are the same family**—they may be combined. When `quantity_product_count` is greater than 1 within one unit family, say the total mixes products (e.g. several bread SKUs sold as loaves/Pc)—do not describe that total as one SKU.
-- **What to bake / what is left**: use `bake_plan` for a production suggestion and `stock_days_of_cover` for how long on-hand lasts versus that weekday’s sales. `suggested_bake` is a guide from past sales, not a confirmed order. Use `recipe_unit_cost` for cost per yield unit and say it uses default purchase prices plus the recipe production cost.
+- **What to bake / what is left**: use `demand_forecast` first. `bake_plan` is the older simple average; use it only if asked for that method. Otherwise use `bake_plan` for a quick production suggestion and `stock_days_of_cover` for how long on-hand lasts versus that weekday’s sales. `suggested_bake` is a guide from past sales, not a confirmed order. Use `recipe_unit_cost` for cost per yield unit and say it uses default purchase prices plus the recipe production cost.
 - **Holidays and campus**: use the PUBLIC HOLIDAYS block when it is present. Do not invent holiday dates or campus term dates that are not listed.
 - **Charts in chat (interactive)**: When the user asks for a graph, chart, or visual trend and you have **concrete numbers** from tools or context, prefer a fenced **`aibm-chart`** block: one JSON object (Chart.js v4) with `type` (`bar`, `line`, `pie`, `doughnut`, `radar`, `polarArea`, `bubble`, or `scatter`), `data` (`labels` and `datasets` with `label`, `data`, optional colors), and optional `options`. The Eli UI renders it with **Chart.js** — tooltips on hover, legend click toggles series, responsive canvas. Optional root key `eli_height` (integer 120–480) sets pixel height. Use ≤12 categories, short ASCII labels, values that **match** prose—never invent data. JSON only — no scripts or HTML in labels. For flowcharts, sequences, or Gantt-style process visuals (not numeric series), you may use **`mermaid`** fences (Mermaid 10.x) instead; those are mostly static. If numbers are uncertain or a chart would mislead, use bullets only.
 - Use **Industry** and **Additional context** from BUSINESS & SCOPE when present; only infer vertical from category/product names when those fields are blank (still label inferences as hypotheses).
@@ -139,6 +149,8 @@ REPORT_RULE;
             $this->normalizeHistoryForOpenAi($history),
             [['role' => 'user', 'content' => $user_message]]
         );
+        $tool_outputs = [];
+        $tool_calls = [];
 
         for ($round = 0; $round < $max_rounds; $round++) {
             $body = [
@@ -184,6 +196,11 @@ REPORT_RULE;
                     }
                     $out = $this->tools->execute($fn, $args, $business_id, $user);
                     $decoded = json_decode($out, true);
+                    $tool_outputs[] = $out;
+                    if (is_array($decoded) && ($decoded['ok'] ?? true) !== false) {
+                        $decoded_args = json_decode($args, true);
+                        $tool_calls[] = ['name' => $fn, 'args' => is_array($decoded_args) ? $decoded_args : []];
+                    }
                     if (is_array($decoded) && isset($decoded['verbatim_block']) && is_string($decoded['verbatim_block']) && $decoded['verbatim_block'] !== '') {
                         $grids[] = $decoded['verbatim_block'];
                         unset($decoded['verbatim_block']);
@@ -204,10 +221,44 @@ REPORT_RULE;
                 return ['reply' => trans('aibusinessmanager::lang.error_generic')];
             }
 
-            return ['reply' => $this->attachOfficialGrids($text, $grids)];
+            if (config('aibusinessmanager.figure_guard', true)) {
+                $text = $this->guardFigures($text, $tool_outputs, $system, $user_message, $history, $business_id);
+            }
+            $reply = $this->attachOfficialGrids($text, $grids);
+            $sources = FigureGuard::sourcesLine($tool_calls);
+
+            return ['reply' => $sources !== '' ? $reply."\n\n".$sources : $reply];
         }
 
         return ['error' => 'generic', 'details' => 'Tool round limit exceeded'];
+    }
+
+    /**
+     * @param  list<string>  $tool_outputs
+     * @param  array<int, mixed>  $history
+     */
+    protected function guardFigures(string $text, array $tool_outputs, string $system, string $user_message, array $history, int $business_id): string
+    {
+        $guard = new FigureGuard();
+        foreach ($tool_outputs as $out) {
+            $guard->addSource($out);
+        }
+        $guard->addSource($user_message);
+        foreach (array_slice($history, -6) as $row) {
+            if (is_array($row) && is_string($row['content'] ?? null)) {
+                $guard->addSource($row['content']);
+            }
+        }
+        $guard->addSource($system);
+
+        $symbol = (string) (Business::with('currency')->find($business_id)?->currency?->symbol ?? '');
+        $result = $guard->clean($text, $symbol);
+        if ($result['removed'] === 0) {
+            return $text;
+        }
+        Log::info('AIBusinessManager: figure guard removed '.$result['removed'].' figure(s).');
+
+        return $result['text']."\n\n_".trans_choice('aibusinessmanager::lang.figures_removed', $result['removed'], ['count' => $result['removed']]).'_';
     }
 
     /**

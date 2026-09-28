@@ -13,6 +13,7 @@ use Modules\AIBusinessManager\Services\Concerns\ContactAndCatalogTools;
 use Modules\AIBusinessManager\Services\Concerns\ExtendedBusinessDataTools;
 use Modules\AIBusinessManager\Services\Concerns\InventoryIntelligenceTools;
 use Modules\AIBusinessManager\Services\Concerns\LocationSalesMatrixTools;
+use Modules\AIBusinessManager\Services\Concerns\ManagerTools;
 use Modules\AIBusinessManager\Services\Concerns\ProductLocationMetricsTool;
 use Modules\AIBusinessManager\Services\Concerns\ReportAlignedTools;
 use Modules\AIBusinessManager\Services\Concerns\SalesReportTool;
@@ -27,6 +28,7 @@ class BusinessDataToolService
     use ExtendedBusinessDataTools;
     use InventoryIntelligenceTools;
     use LocationSalesMatrixTools;
+    use ManagerTools;
     use ProductLocationMetricsTool;
     use ReportAlignedTools;
     use SalesReportTool;
@@ -41,6 +43,14 @@ class BusinessDataToolService
      * @return list<array{type: string, function: array{name: string, description: string, parameters: array<string, mixed>}}>
      */
     public function getOpenAiToolDefinitions(): array
+    {
+        return array_merge($this->coreToolDefinitions(), $this->managerToolDefinitions());
+    }
+
+    /**
+     * @return list<array{type: string, function: array{name: string, description: string, parameters: array<string, mixed>}}>
+     */
+    protected function coreToolDefinitions(): array
     {
         return [
             [
@@ -947,6 +957,11 @@ class BusinessDataToolService
         $args = json_decode($argumentsJson, true);
         if (! is_array($args)) {
             return json_encode(['ok' => false, 'error' => 'invalid_json_arguments']);
+        }
+
+        $managed = $this->executeManagerTool($name, $args, $businessId, $user);
+        if ($managed !== null) {
+            return json_encode($managed, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
         }
 
         return match ($name) {
