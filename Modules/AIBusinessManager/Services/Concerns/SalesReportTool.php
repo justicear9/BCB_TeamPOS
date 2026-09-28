@@ -127,8 +127,8 @@ trait SalesReportTool
             'group_by' => $groupBy,
             'truncated' => $truncated,
             'note' => $basis === 'invoice_final_total'
-                ? 'revenue is invoice final_total. Do not redraw the table or quote amounts; the app attaches verbatim_block.'
-                : 'revenue is sell-line value, so it can differ from invoice totals when an invoice has a discount. Do not redraw the table or quote amounts; the app attaches verbatim_block.',
+                ? 'revenue is invoice final_total. Prefer the attached verbatim_block for the grid; you may quote figures when advising.'
+                : 'revenue is sell-line value, so it can differ from invoice totals when an invoice has a discount. Prefer the attached verbatim_block for the grid; you may quote figures when advising.',
             'rows' => $rows,
             'verbatim_block' => $verbatim,
         ];
