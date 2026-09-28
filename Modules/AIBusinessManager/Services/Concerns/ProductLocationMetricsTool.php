@@ -535,7 +535,8 @@ trait ProductLocationMetricsTool
     protected function applyUnitFamilyFilter($query, string $unitQuery): void
     {
         $needles = UnitAlias::sqlMatchNeedles($unitQuery);
-        $query->where(function ($w) use ($needles) {
+        $pieceFamily = UnitAlias::family($unitQuery) === UnitAlias::FAMILY_PIECE;
+        $query->where(function ($w) use ($needles, $pieceFamily) {
             foreach ($needles as $needle) {
                 $like = '%'.addcslashes($needle, '%_\\').'%';
                 $w->orWhere('sell_unit.short_name', 'like', $like)
@@ -543,8 +544,7 @@ trait ProductLocationMetricsTool
                     ->orWhere('base_u.short_name', 'like', $like)
                     ->orWhere('base_u.actual_name', 'like', $like);
             }
-            // Lines with no sub-unit that still sell in piece family via empty unit → treat blank as Pc when querying piece family
-            if (UnitAlias::family($unitQuery) === UnitAlias::FAMILY_PIECE) {
+            if ($pieceFamily) {
                 $w->orWhere(function ($blank) {
                     $blank->whereNull('tsl.sub_unit_id')
                         ->where(function ($b) {
