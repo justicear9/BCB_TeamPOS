@@ -78,7 +78,7 @@ class Economics
             'products' => $rows,
             'overheads' => $base['overhead_summary'],
             'owner_fixed_costs_entered' => $base['fixed_count'] > 0,
-            'note' => 'Ingredients use the latest purchase prices. Factory cost adds production expenses (gas, utilities, packaging, repairs, production supplies) spread by ingredient cost. Full cost adds distribution, people, admin expenses and owner-entered fixed costs the same way. Cost per sold unit spreads the cost of unsold / written-off units over units sold. Recipe cost in TeamPOS is the recipe screen figure for comparison. '.($base['fixed_count'] === 0 ? 'No owner fixed costs (rent, wages) are entered in Eli settings, and TeamPOS has no payroll, so labour and rent are missing: real margins are lower.' : ''),
+            'note' => 'Ingredients use the latest purchase prices. Factory cost adds production expenses (gas, utilities, packaging, repairs, production supplies) spread by ingredient cost. Full cost adds distribution, people, admin expenses and owner-entered fixed costs the same way. Cost per sold unit spreads the cost of unsold / written-off units over units sold. Recipe cost in TeamPOS is the recipe screen figure for comparison. Only costs recorded as TeamPOS expenses (plus any extra costs entered in Eli settings) are included.',
             'verbatim_block' => $block,
         ];
     }
@@ -181,7 +181,7 @@ class Economics
             'locations' => $rows,
             'overheads' => $base['overhead_summary'],
             'owner_fixed_costs_entered' => $base['fixed_count'] > 0,
-            'note' => 'Revenue = invoices minus sell returns. Cost of goods for baked products = factory cost (ingredients at latest prices + production expenses spread by ingredient cost); other products use default purchase price. Written off = stock adjustments at factory cost. Distribution expenses follow units received by transfer; people/admin expenses and business-wide fixed costs follow revenue share. This is a management estimate, not the accounting P&L. '.($base['fixed_count'] === 0 ? 'No rent or wages are entered in Eli settings and TeamPOS has no payroll, so real profit is lower.' : ''),
+            'note' => 'Revenue = invoices minus sell returns. Cost of goods for baked products = factory cost (ingredients at latest prices + production expenses spread by ingredient cost); other products use default purchase price. Written off = stock adjustments at factory cost. Distribution expenses follow units received by transfer; people/admin expenses and business-wide fixed costs follow revenue share. This is a management estimate from TeamPOS sales, stock and expenses, not the accounting P&L.',
             'verbatim_block' => $block,
         ];
     }

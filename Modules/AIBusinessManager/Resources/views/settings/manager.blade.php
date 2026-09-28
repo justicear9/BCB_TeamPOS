@@ -65,7 +65,7 @@
                                 <tr>
                                     <td>{!! $locationSelect("costs[$i][location_id]", $c['location_id'] ?? '') !!}</td>
                                     <td><input type="text" maxlength="120" name="costs[{{ $i }}][name]" class="form-control input-sm" value="{{ $c['name'] ?? '' }}" placeholder="@lang('aibusinessmanager::lang.mgr_cost_placeholder')"></td>
-                                    <td>{!! $optionSelect("costs[$i][category]", $manager['categories'], $c['category'] ?? 'labour') !!}</td>
+                                    <td>{!! $optionSelect("costs[$i][category]", $manager['categories'], $c['category'] ?? 'rent') !!}</td>
                                     <td><input type="number" step="0.01" min="0" name="costs[{{ $i }}][monthly_amount]" class="form-control input-sm" value="{{ isset($c['monthly_amount']) ? (float) $c['monthly_amount'] : '' }}"></td>
                                     <td><input type="date" name="costs[{{ $i }}][starts_on]" class="form-control input-sm" value="{{ $c['starts_on'] ?? '' }}"></td>
                                     <td><input type="date" name="costs[{{ $i }}][ends_on]" class="form-control input-sm" value="{{ $c['ends_on'] ?? '' }}"></td>

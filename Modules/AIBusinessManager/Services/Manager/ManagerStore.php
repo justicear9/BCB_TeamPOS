@@ -12,7 +12,7 @@ class ManagerStore
 {
     public const TARGET_METRICS = ['revenue', 'gross_profit', 'invoices', 'waste_pct', 'sell_through_pct'];
 
-    public const COST_CATEGORIES = ['rent', 'labour', 'utilities', 'transport', 'other'];
+    public const COST_CATEGORIES = ['rent', 'utilities', 'transport', 'other'];
 
     public const EVENT_KINDS = ['term', 'event', 'closure', 'promo'];
 

@@ -14,7 +14,7 @@ use Modules\AIBusinessManager\Support\GhanaPublicHolidays;
  *    and filled with the typical uncapped same-weekday demand (never below what was sold).
  * 2. Six simple models are backtested one day ahead over the last four weeks; the lowest WAPE wins per series.
  * 3. The winner's historic error ratios give the p10 / p50 / p90 range.
- * 4. Holidays, month-end pay days and owner calendar events adjust the forecast.
+ * 4. Holidays and owner calendar events adjust the forecast.
  * 5. The recommended quantity is the newsvendor quantile: (price - cost) / (price - leftover value).
  */
 class DemandForecaster
@@ -624,22 +624,6 @@ class DemandForecaster
             } else {
                 $factor *= 0.7;
                 $notes[] = $holiday.': no holiday history yet; assumed 70% of normal.';
-            }
-        }
-
-        $dom = (int) $target->day;
-        if ($dom >= 26 || $dom <= 2) {
-            $learned = $this->learnedRatio($locationId, function (string $date) {
-                $d = (int) substr($date, 8, 2);
-
-                return $d >= 26 || $d <= 2;
-            }, false);
-            if ($learned !== null && $learned['n'] >= 8) {
-                $shrunk = 1 + ($learned['ratio'] - 1) * ($learned['n'] / ($learned['n'] + 15));
-                if (abs($shrunk - 1) >= 0.03) {
-                    $factor *= $shrunk;
-                    $notes[] = 'Month-end pay days have run '.($shrunk >= 1 ? '+' : '').round(($shrunk - 1) * 100).'% at '.($this->scope->locationNames[$locationId] ?? 'this shop').'.';
-                }
             }
         }
 

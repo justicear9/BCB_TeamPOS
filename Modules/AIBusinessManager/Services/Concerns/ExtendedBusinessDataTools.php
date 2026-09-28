@@ -504,39 +504,4 @@ trait ExtendedBusinessDataTools
             ])->values()->all(),
         ];
     }
-
-    /**
-     * @param  array<string, mixed>  $args
-     * @return array<string, mixed>
-     */
-    protected function payrollAggregate(array $args, int $businessId, User $user): array
-    {
-        $granularity = (string) ($args['granularity'] ?? 'total');
-        if (! in_array($granularity, ['total', 'month', 'year'], true)) {
-            return ['ok' => false, 'error' => 'invalid_granularity'];
-        }
-
-        $range = $this->parseDateRange($args, $businessId, $user);
-        if (isset($range['ok']) && $range['ok'] === false) {
-            return $range;
-        }
-
-        $base = DB::table('transactions')
-            ->where('business_id', $businessId)
-            ->where('type', 'payroll')
-            ->where('status', 'final')
-            ->whereBetween('transaction_date', [$range['start'], $range['end']])
-            ->when($range['location_ids'] !== null, fn ($q) => $q->whereIn('location_id', $range['location_ids']));
-
-        return $this->aggregateFinalTotalsByGranularity(
-            $base,
-            $granularity,
-            $range['precision'],
-            $range['symbol'],
-            $range['code'],
-            'payroll_final',
-            'payroll_total',
-            'runs'
-        );
-    }
 }

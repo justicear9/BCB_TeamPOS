@@ -444,22 +444,6 @@ class BusinessDataToolService
             [
                 'type' => 'function',
                 'function' => [
-                    'name' => 'payroll_aggregate',
-                    'description' => 'Payroll transactions (type=payroll, status=final): totals by period.',
-                    'parameters' => [
-                        'type' => 'object',
-                        'properties' => [
-                            'start_date' => ['type' => 'string'],
-                            'end_date' => ['type' => 'string'],
-                            'granularity' => ['type' => 'string', 'enum' => ['total', 'month', 'year']],
-                        ],
-                        'required' => ['start_date', 'end_date', 'granularity'],
-                    ],
-                ],
-            ],
-            [
-                'type' => 'function',
-                'function' => [
                     'name' => 'purchase_sell_totals',
                     'description' => 'Purchase & Sale report summary for a date range: purchase totals (inc/exc tax, due), finalized sell totals, purchase_return and sell_return inc-tax totals, and the same “difference” figures as the TeamPOS Purchase & Sale report.',
                     'parameters' => [
@@ -988,7 +972,6 @@ class BusinessDataToolService
             'stock_transfer_summary' => json_encode($this->stockTransferSummary($args, $businessId, $user)),
             'sales_order_pipeline' => json_encode($this->salesOrderPipeline($args, $businessId, $user)),
             'purchase_order_pipeline' => json_encode($this->purchaseOrderPipeline($args, $businessId, $user)),
-            'payroll_aggregate' => json_encode($this->payrollAggregate($args, $businessId, $user)),
             'purchase_sell_totals' => json_encode($this->purchaseSellTotals($args, $businessId, $user)),
             'profit_loss_snapshot' => json_encode($this->profitLossSnapshot($args, $businessId, $user)),
             'tax_report_snapshot' => json_encode($this->taxReportSnapshot($args, $businessId, $user)),

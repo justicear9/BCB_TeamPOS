@@ -49,7 +49,7 @@ trait ManagerTools
                 'name_query' => ['type' => 'string', 'description' => 'Product name substring, e.g. butter bread.'],
             ]),
             $tool('ingredient_variance', 'Ingredients: recipe-expected use (from units baked) vs recorded use on the production screen, purchases, write-offs, and production waste per product. Finds over-use and shrinkage. Default last 28 days.', $range),
-            $tool('demand_forecast', 'Top-quality demand forecast per shop and product for a future day (default tomorrow) with likely range, recommended quantity to send (margin-based), and the bake plan per bakery (batches, where to send). Backtested model per series, sold-out correction, holidays, pay days, owner calendar events. days up to 7 for a multi-day outlook. Use for "how much to bake", "what to send to Trek", "forecast".', $location + [
+            $tool('demand_forecast', 'Top-quality demand forecast per shop and product for a future day (default tomorrow) with likely range, recommended quantity to send (margin-based), and the bake plan per bakery (batches, where to send). Backtested model per series, sold-out correction, holidays, owner calendar events. days up to 7 for a multi-day outlook. Use for "how much to bake", "what to send to Trek", "forecast".', $location + [
                 'target_date' => ['type' => 'string', 'description' => 'YYYY-MM-DD, default tomorrow.'],
                 'days' => ['type' => 'integer', 'description' => '1–7 days starting at target_date.'],
                 'name_query' => ['type' => 'string'],
