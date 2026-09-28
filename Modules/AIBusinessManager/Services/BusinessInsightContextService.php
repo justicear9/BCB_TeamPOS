@@ -303,7 +303,7 @@ class BusinessInsightContextService
 
         $lines[] = '';
         $lines[] = '=== TOOL USAGE ===';
-        $lines[] = 'Read-only tools cover sales, returns, opening stock, sale payment mix (invoice-linked), purchases (received), expenses (net refunds), customers, suppliers, stock snapshot, stock adjustments/transfers, sales/purchase order pipelines, payroll, report-aligned summaries, and product_location_metrics (averages / branch compare)—within location permissions. Do not invent figures. Prefer merchant-business topics aligned with OWNER-PROVIDED CONTEXT industry when shown; gently redirect unrelated conversation.';
+        $lines[] = 'Knowledge base = this business’s live TeamPOS data (read-only). Prefer deriving answers from tools. product_location_metrics: unit_query loaves ≡ Pc/Pcs. Do not invent figures. Prefer merchant-business topics aligned with OWNER-PROVIDED CONTEXT industry when shown; gently redirect unrelated conversation.';
 
         $out = implode("\n", $lines);
         if (is_string($report_page_context) && trim($report_page_context) !== '') {
