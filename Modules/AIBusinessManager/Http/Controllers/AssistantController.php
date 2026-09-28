@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Modules\AIBusinessManager\Services\AiBusinessAssistantService;
+use Modules\AIBusinessManager\Services\Manager\BriefBuilder;
 use Modules\AIBusinessManager\Services\ReportPageContextService;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
@@ -26,6 +27,7 @@ class AssistantController extends Controller
         $business_id = (int) session()->get('user.business_id');
         $user = auth()->user();
         $snapshot = $assistant->buildSnapshot($business_id, $user);
+        BriefBuilder::deliverTo($business_id, $user);
         $messages = $this->loadPersistedMessages($business_id, (int) $user->id);
 
         return view('aibusinessmanager::assistant.index', [

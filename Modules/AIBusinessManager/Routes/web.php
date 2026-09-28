@@ -16,6 +16,7 @@ Route::middleware(['web', 'auth', 'language', 'timezone', 'AdminSidebarMenu', 'S
         Route::get('/', [AssistantController::class, 'index'])->name('assistant');
         Route::get('/settings', [SettingsController::class, 'edit'])->name('settings.edit');
         Route::put('/settings', [SettingsController::class, 'update'])->name('settings.update');
+        Route::put('/settings/manager', [SettingsController::class, 'updateManager'])->name('settings.manager');
         Route::get('/chat/messages', [AssistantController::class, 'messages'])
             ->middleware('throttle:120,1')
             ->name('chat.messages');

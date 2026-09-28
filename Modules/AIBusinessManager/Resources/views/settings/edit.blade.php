@@ -67,6 +67,8 @@
                     </form>
                 </div>
             </div>
+
+            @include('aibusinessmanager::settings.manager')
         @endif
     </div>
 </section>

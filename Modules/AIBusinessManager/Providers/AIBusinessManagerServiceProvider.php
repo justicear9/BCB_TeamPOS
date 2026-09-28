@@ -3,8 +3,11 @@
 namespace Modules\AIBusinessManager\Providers;
 
 use App\Utils\ModuleUtil;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
+use Modules\AIBusinessManager\Console\EliAlerts;
+use Modules\AIBusinessManager\Console\EliDailyBrief;
 use Modules\AIBusinessManager\Http\Controllers\AssistantController;
 use Modules\AIBusinessManager\Services\ReportPageContextService;
 
@@ -17,6 +20,23 @@ class AIBusinessManagerServiceProvider extends ServiceProvider
         $this->registerTranslations();
         $this->loadMigrationsFrom(__DIR__.'/../Database/Migrations');
         $this->registerFloatingChatComposer();
+        $this->registerManagerCommands();
+    }
+
+    protected function registerManagerCommands(): void
+    {
+        if (! $this->app->runningInConsole()) {
+            return;
+        }
+        $this->commands([
+            EliDailyBrief::class,
+            EliAlerts::class,
+        ]);
+        $this->app->booted(function () {
+            $schedule = $this->app->make(Schedule::class);
+            $schedule->command('eli:daily-brief')->dailyAt('05:30')->withoutOverlapping();
+            $schedule->command('eli:alerts')->hourly()->between('7:00', '21:00')->withoutOverlapping();
+        });
     }
 
     protected function registerFloatingChatComposer(): void
