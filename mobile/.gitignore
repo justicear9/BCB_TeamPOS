@@ -17,6 +17,7 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
+android-signing.properties
 
 # Metro
 .metro-health-check*
@@ -43,3 +44,6 @@ yarn-error.*
 # Generated native projects (expo prebuild)
 /ios
 /android
+
+# local release bundles
+/build
