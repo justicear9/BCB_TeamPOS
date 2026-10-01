@@ -88,6 +88,7 @@ class SyncController extends Controller
             'discount_type' => 'nullable|in:fixed,percentage',
             'discount_amount' => 'nullable|numeric|min:0',
             'rp_redeemed' => 'nullable|integer|min:0',
+            'selling_price_group_id' => 'nullable|integer|min:0',
             'payments' => 'present|array',
             'payments.*.method' => 'required|string',
             'payments.*.amount' => 'required|numeric|min:0',

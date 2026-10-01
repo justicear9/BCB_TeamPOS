@@ -7,12 +7,14 @@ use App\BusinessLocation;
 use App\Contact;
 use App\InvoiceLayout;
 use App\Product;
+use App\SellingPriceGroup;
 use App\Transaction;
 use App\TransactionPayment;
 use App\TransactionSellLine;
 use App\User;
 use App\Utils\ProductUtil;
 use App\Utils\Util;
+use App\VariationGroupPrice;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -62,6 +64,7 @@ class CatalogPull
         $sinceAt = $this->cursor($since);
         $business = Business::findOrFail($user->business_id);
         $businessName = (string) $business->name;
+        $priceGroups = $this->priceGroups($user, $location);
 
         return [
             'server_time' => $this->databaseTime(),
@@ -70,7 +73,8 @@ class CatalogPull
                 'name' => $location->name,
                 'business_name' => $businessName,
             ],
-            'products' => $this->products($location),
+            'price_groups' => $priceGroups,
+            'products' => $this->products($location, array_column($priceGroups['options'], 'id')),
             'customers' => $this->customers($user->business_id, $location->id),
             'payment_methods' => $this->paymentMethods($location, $user->business_id),
             'receipt' => $this->receiptLayout($location, $businessName),
@@ -105,7 +109,31 @@ class CatalogPull
      * Always the full list for the shop. Stock changes in TeamPOS do not touch
      * updated_at, so an incremental pull would miss them.
      */
-    private function products(BusinessLocation $location): array
+    /**
+     * The price groups this cashier may sell at, as the POS screen offers them.
+     * Id 0 is the default selling price.
+     */
+    private function priceGroups(User $user, BusinessLocation $location): array
+    {
+        $options = [];
+        if ($user->can('access_default_selling_price')) {
+            $options[] = ['id' => 0, 'name' => 'Default price'];
+        }
+        $groups = SellingPriceGroup::where('business_id', $location->business_id)->active()->orderBy('name')->get(['id', 'name']);
+        foreach ($groups as $group) {
+            if ($user->can('selling_price_group.'.$group->id)) {
+                $options[] = ['id' => $group->id, 'name' => $group->name];
+            }
+        }
+
+        $ids = array_column($options, 'id');
+        $locationGroup = (int) $location->selling_price_group_id;
+        $default = in_array($locationGroup, $ids, true) ? $locationGroup : ($ids[0] ?? null);
+
+        return ['options' => $options, 'default_id' => $default];
+    }
+
+    private function products(BusinessLocation $location, array $priceGroupIds): array
     {
         $locationId = $location->id;
         $products = Product::where('business_id', $location->business_id)
@@ -118,9 +146,28 @@ class CatalogPull
             }])
             ->get();
 
+        $groupRows = VariationGroupPrice::whereIn('variation_id', $products->pluck('variations')->flatten()->pluck('id'))
+            ->whereIn('price_group_id', array_filter($priceGroupIds))
+            ->get()
+            ->groupBy('variation_id');
+
         $rows = [];
         foreach ($products as $product) {
             foreach ($product->variations as $variation) {
+                $prices = [];
+                foreach ($priceGroupIds as $groupId) {
+                    $row = $groupId ? $groupRows->get($variation->id)?->firstWhere('price_group_id', $groupId) : null;
+                    $price = (float) $variation->sell_price_inc_tax;
+                    if ($row) {
+                        $groupPrice = $row->price_type === 'percentage'
+                            ? (float) $this->productUtil->calc_percentage($variation->sell_price_inc_tax, $row->price_inc_tax)
+                            : (float) $row->price_inc_tax;
+                        if ($groupPrice > 0) {
+                            $price = $groupPrice;
+                        }
+                    }
+                    $prices[(string) $groupId] = (string) round($price, 4);
+                }
                 $stock = $variation->variation_location_details->first();
                 $qty = (float) ($stock->qty_available ?? 0);
                 if ($product->type === 'combo') {
@@ -133,6 +180,7 @@ class CatalogPull
                     'variation_name' => $variation->name,
                     'sku' => $variation->sub_sku ?: $product->sku,
                     'sell_price' => (string) SaleCreator::listPrice($this->productUtil, $variation, $location, $product->tax),
+                    'prices' => (object) $prices,
                     'qty_available' => (string) $qty,
                     'enable_stock' => $product->type === 'combo' ? 1 : (int) $product->enable_stock,
                 ];
@@ -198,9 +246,10 @@ class CatalogPull
             return [];
         }
 
-        return Contact::where('business_id', $businessId)
+        return Contact::withTrashed()
+            ->where('business_id', $businessId)
             ->whereIn('type', ['customer', 'both'])
-            ->where('contact_status', '!=', 'active')
+            ->where(fn ($query) => $query->where('contact_status', '!=', 'active')->orWhereNotNull('deleted_at'))
             ->where('updated_at', '>', $since)
             ->pluck('id')
             ->all();

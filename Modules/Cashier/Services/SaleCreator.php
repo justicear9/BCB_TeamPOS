@@ -6,6 +6,7 @@ use App\Business;
 use App\BusinessLocation;
 use App\Contact;
 use App\Product;
+use App\SellingPriceGroup;
 use App\Transaction;
 use App\User;
 use App\Variation;
@@ -90,9 +91,10 @@ class SaleCreator
             ->whereIn('type', ['customer', 'both'])
             ->findOrFail($payload['contact_id']);
 
+        $priceGroupId = $this->priceGroup($user, $location, $payload);
         $lines = [];
         foreach ($payload['products'] as $line) {
-            $lines[] = $this->line($user, $location, $line);
+            $lines[] = $this->line($user, $location, $line, $priceGroupId);
         }
 
         $this->ensureStock($location, $lines);
@@ -118,7 +120,7 @@ class SaleCreator
             'discount_amount' => $discount['discount_amount'],
             'final_total' => $invoiceTotal['final_total'],
             'is_created_from_api' => 1,
-            'selling_price_group_id' => $location->selling_price_group_id ?: null,
+            'selling_price_group_id' => ($priceGroupId ?? (int) $location->selling_price_group_id) ?: null,
             'rp_redeemed' => $points,
             'rp_redeemed_amount' => $pointsAmount,
             'staff_note' => $dateNote,
@@ -275,7 +277,33 @@ class SaleCreator
         }
     }
 
-    private function line(User $user, BusinessLocation $location, array $line): array
+    /**
+     * The price group the sale was rung up in. Null when the device did not say,
+     * which keeps the location's own group, as sales did before groups were offered.
+     */
+    private function priceGroup(User $user, BusinessLocation $location, array $payload): ?int
+    {
+        if (! isset($payload['selling_price_group_id'])) {
+            return null;
+        }
+
+        $groupId = (int) $payload['selling_price_group_id'];
+        if ($groupId === 0) {
+            if (empty($location->selling_price_group_id) || $user->can('access_default_selling_price')) {
+                return 0;
+            }
+            abort(422, 'You are not allowed to sell at the default price');
+        }
+
+        $exists = SellingPriceGroup::where('business_id', $location->business_id)->active()->whereKey($groupId)->exists();
+        if (! $exists || ! $user->can('selling_price_group.'.$groupId)) {
+            abort(422, 'That price group is not available. Sync, then ring the sale up again.');
+        }
+
+        return $groupId;
+    }
+
+    private function line(User $user, BusinessLocation $location, array $line, ?int $priceGroupId): array
     {
         $product = Product::where('business_id', $location->business_id)
             ->with(['variations', 'product_tax'])
@@ -296,7 +324,7 @@ class SaleCreator
             abort(422, 'Variation is not on this product');
         }
 
-        $listPrice = round(self::listPrice($this->productUtil, $variation, $location, $product->tax), 4);
+        $listPrice = round(self::listPrice($this->productUtil, $variation, $location, $product->tax, $priceGroupId), 4);
         $devicePrice = round((float) $line['unit_price'], 4);
         $price = $listPrice;
         if (abs($devicePrice - $listPrice) > 0.009) {
@@ -349,14 +377,17 @@ class SaleCreator
     }
 
     /**
-     * The price the shop sells this variation for, tax included. Uses the
-     * location's selling price group when it has a price for the variation.
+     * The price the shop sells this variation for, tax included. A null group
+     * means the location's own selling price group, 0 the default price. Falls
+     * back to the default price when the group has no price, or a zero price,
+     * for the variation.
      */
-    public static function listPrice(ProductUtil $productUtil, $variation, BusinessLocation $location, $taxId): float
+    public static function listPrice(ProductUtil $productUtil, $variation, BusinessLocation $location, $taxId, ?int $priceGroupId = null): float
     {
-        if (! empty($location->selling_price_group_id)) {
-            $group = $productUtil->getVariationGroupPrice($variation->id, $location->selling_price_group_id, $taxId);
-            if ($group['price_inc_tax'] !== '' && $group['price_inc_tax'] !== null) {
+        $groupId = $priceGroupId ?? (int) $location->selling_price_group_id;
+        if ($groupId > 0) {
+            $group = $productUtil->getVariationGroupPrice($variation->id, $groupId, $taxId);
+            if ((float) $group['price_inc_tax'] > 0) {
                 return (float) $group['price_inc_tax'];
             }
         }
