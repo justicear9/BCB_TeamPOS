@@ -26,6 +26,7 @@ import * as Network from 'expo-network';
 import Constants from 'expo-constants';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import {
+  ArrowLeftRight,
   Banknote,
   Check,
   ChevronDown,
@@ -151,6 +152,7 @@ function Cashier() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [locations, setLocations] = useState([]);
+  const [branches, setBranches] = useState([]);
   const [locationId, setLocationId] = useState(null);
   const [locationName, setLocationName] = useState('');
   const [businessName, setBusinessName] = useState('');
@@ -256,6 +258,7 @@ function Cashier() {
     setPriceGroups({ options: groups.options || [], default_id: groups.default_id ?? null });
     setPriceGroupId((current) => (current != null && groupIds.includes(current) ? current : groups.default_id ?? null));
     setRegister(readJson(await metaGet('register'), null));
+    setBranches(readJson(await metaGet('locations'), []));
     setCustomerId((current) => {
       if (current && customerRows.some((row) => row.id === current)) {
         return current;
@@ -297,7 +300,7 @@ function Cashier() {
       }
     }
 
-    const rows = await fetchLocations();
+    const rows = await rememberBranches();
     setLocations(rows);
     if (rows.length === 1) {
       await pullLocation(rows[0].id);
@@ -342,7 +345,7 @@ function Cashier() {
       await metaSet('username', username.trim());
       setCashierName(username.trim());
       await login(username.trim(), password);
-      const rows = await fetchLocations();
+      const rows = await rememberBranches();
       setLocations(rows);
       if (rows.length === 1) {
         await chooseLocation(rows[0].id);
@@ -354,13 +357,26 @@ function Cashier() {
     }
   }
 
+  async function rememberBranches() {
+    const rows = await fetchLocations();
+    await metaSet('locations', JSON.stringify(rows.map((row) => ({ id: row.id, name: row.name }))));
+    setBranches(rows);
+    return rows;
+  }
+
   async function chooseLocation(id) {
     setError('');
     setOpening(true);
     try {
+      // Products and stock belong to one branch, so a new branch starts from a full download.
+      await metaSet(`since_${id}`, '');
       await pullLocation(id);
       setLocationId(id);
       setLocations([]);
+      setCart([]);
+      setDiscount({ type: 'fixed', amount: 0 });
+      setPoints(0);
+      setPriceGroupId(null);
       setStage('register');
       setTab('home');
       await refreshLocal();
@@ -701,7 +717,10 @@ function Cashier() {
     wasOnline.current = online;
   }, [online, locationId]);
 
-  const registerOpen = registerIsOpen(register);
+  const registerAway =
+    registerIsOpen(register) && register.location_id != null && Number(register.location_id) !== Number(locationId);
+  const registerOpen = registerIsOpen(register) && !registerAway;
+  const registerShown = registerOpen || registerAway ? register : { open: false };
 
   const refreshRegister = useCallback(async () => {
     try {
@@ -718,6 +737,12 @@ function Cashier() {
   }, [online, locationId, tab, refreshRegister]);
 
   useEffect(() => {
+    if (online && locationId && tab === 'account') {
+      rememberBranches().catch(() => {});
+    }
+  }, [online, locationId, tab]);
+
+  useEffect(() => {
     if (!locationId) {
       return undefined;
     }
@@ -730,8 +755,8 @@ function Cashier() {
   }, [locationId, refreshRegister]);
 
   useEffect(() => {
-    remindToCloseRegister(Boolean(locationId) && registerOpen);
-  }, [locationId, registerOpen]);
+    remindToCloseRegister(Boolean(locationId) && registerIsOpen(register));
+  }, [locationId, register]);
 
   const lastBack = useRef(0);
   useEffect(() => {
@@ -1126,7 +1151,7 @@ function Cashier() {
         clientUuid: newClientUuid(),
         cashier: await metaGet('username'),
         payload: { transaction_id: sale.serverId, refund_method: method, lines },
-        local: { value, refund, stock },
+        local: { value, refund, stock, location_id: locationId },
       });
     } catch (returnError) {
       setError(returnError.message);
@@ -1185,6 +1210,18 @@ function Cashier() {
     if (online) {
       await onSync();
     }
+  }
+
+  async function switchBranch(id) {
+    if (Number(id) === Number(locationId)) {
+      return;
+    }
+    if (!online) {
+      setError('Switching branch needs a connection to TeamPOS.');
+      return;
+    }
+    await chooseLocation(id);
+    await refreshRegister();
   }
 
   async function showDrawer() {
@@ -1271,13 +1308,13 @@ function Cashier() {
   if (overlay?.kind === 'drawer') {
     return (
       <Drawer
-        register={registerOpen ? register : { open: false }}
+        register={registerShown}
         methods={paymentMethods}
         canClose={settings.can_close_register !== false}
         busy={busy}
         error={error}
         online={online}
-        locationName={locationName}
+        locationName={registerAway ? register.location_name : locationName}
         onBack={() => {
           setOverlay(null);
           setError('');
@@ -1411,6 +1448,8 @@ function Cashier() {
           busy={busy}
           error={error}
           onOpen={startRegister}
+          openElsewhere={registerAway ? register.location_name || 'another branch' : null}
+          onCloseElsewhere={showDrawer}
         />
       ) : null}
       {tab === 'sell' && registerOpen ? (
@@ -1480,8 +1519,12 @@ function Cashier() {
           syncing={syncing}
           onSync={onSync}
           onLogout={onLogout}
-          register={registerOpen ? register : { open: false }}
+          register={registerShown}
+          registerAway={registerAway}
           onDrawer={showDrawer}
+          branches={branches}
+          locationId={locationId}
+          onSwitchBranch={switchBranch}
           error={error}
         />
       ) : null}
@@ -2012,10 +2055,16 @@ function Account({
   onSync,
   onLogout = () => {},
   register,
+  registerAway = false,
   onDrawer,
+  branches = [],
+  locationId = null,
+  onSwitchBranch = () => {},
   error,
 }) {
   const [leaving, setLeaving] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const canSwitch = branches.length > 1;
   const spin = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (!syncing) {
@@ -2094,7 +2143,7 @@ function Account({
             <Text style={styles.heroStatValue} numberOfLines={1} adjustsFontSizeToFit>
               {money(shiftTotal)}
             </Text>
-            <Text style={styles.heroStatLabel}>rung up on this phone</Text>
+            <Text style={styles.heroStatLabel}>sold today</Text>
           </View>
         </View>
       </View>
@@ -2135,12 +2184,36 @@ function Account({
           <View style={styles.fill}>
             <Text style={styles.syncTitle}>{register?.open ? 'Register open' : 'Register closed'}</Text>
             <Text style={styles.syncHint}>
-              {register?.open
-                ? `${money(register.expected_cash)} cash expected · since ${prettyDate(register.opened_at)}`
-                : 'Open it with the float before the first sale.'}
+              {!register?.open
+                ? 'Open it with the float before the first sale.'
+                : registerAway
+                  ? `Open at ${register.location_name || 'another branch'} · close it to sell here`
+                  : `${money(register.expected_cash)} cash expected · since ${prettyDate(register.opened_at)}`}
             </Text>
           </View>
           <Text style={styles.syncAction}>{register?.open ? 'Close' : 'Open'}</Text>
+        </Pressable>
+      ) : null}
+
+      {canSwitch ? (
+        <Pressable
+          onPress={() => setPicking(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Switch branch"
+          style={({ pressed }) => [styles.syncCard, styles.drawerCard, pressed && styles.pressed]}
+        >
+          <View style={[styles.syncBadge, styles.branchBadge]}>
+            <ArrowLeftRight color={colors.white} size={20} strokeWidth={2.25} />
+          </View>
+          <View style={styles.fill}>
+            <Text style={styles.syncTitle} numberOfLines={1}>
+              {locationName || 'Choose a branch'}
+            </Text>
+            <Text style={styles.syncHint}>
+              {online ? `You work at ${branches.length} branches` : 'Connect to switch branch'}
+            </Text>
+          </View>
+          <Text style={styles.syncAction}>Switch</Text>
         </Pressable>
       ) : null}
 
@@ -2162,6 +2235,51 @@ function Account({
         <Text style={styles.signOutText}>Sign out</Text>
       </Pressable>
       <Text style={styles.accountFoot}>TeamPOS Cashier</Text>
+
+      <Modal visible={picking} transparent animationType="fade" onRequestClose={() => setPicking(false)}>
+        <Pressable style={styles.scrim} onPress={() => setPicking(false)}>
+          <Pressable style={styles.dialog} onPress={() => {}}>
+            <Text style={styles.dialogTitle}>Switch branch</Text>
+            <Text style={styles.dialogBody}>
+              {online
+                ? 'Products, stock and sales change to the branch you pick. Anything waiting to sync still goes to its own branch.'
+                : 'Connect to TeamPOS to switch branch.'}
+            </Text>
+            <View style={styles.branchList}>
+              {branches.map((branch, index) => {
+                const current = Number(branch.id) === Number(locationId);
+                return (
+                  <Pressable
+                    key={branch.id}
+                    disabled={current || !online}
+                    onPress={() => {
+                      setPicking(false);
+                      onSwitchBranch(branch.id);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: current, disabled: !online }}
+                    style={({ pressed }) => [
+                      styles.branchRow,
+                      index < branches.length - 1 && styles.branchRule,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <View style={[styles.locationIcon, current && styles.branchIconOn]}>
+                      <MapPin color={current ? colors.white : colors.accent} size={18} strokeWidth={2} />
+                    </View>
+                    <View style={styles.fill}>
+                      <Text style={[styles.locationName, !online && !current && styles.branchOff]}>{branch.name}</Text>
+                      <Text style={styles.locationHint}>{current ? 'Selling here now' : 'Tap to switch'}</Text>
+                    </View>
+                    {current ? <Check color={colors.accent} size={20} strokeWidth={2.5} /> : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+            <QuietButton label="Cancel" onPress={() => setPicking(false)} />
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal visible={leaving} transparent animationType="fade" onRequestClose={() => setLeaving(false)}>
         <View style={styles.scrim}>
@@ -2817,6 +2935,12 @@ function WebPreview({ name }) {
           onLogout={() => {}}
           register={{ open: true, expected_cash: '214.5', opened_at: '2026-02-04 07:58:00' }}
           onDrawer={() => {}}
+          branches={[
+            { id: 5, name: 'Trek' },
+            { id: 6, name: 'Madina' },
+            { id: 7, name: 'Spintex' },
+          ]}
+          locationId={5}
           error=""
         />
       ) : null}
@@ -3023,6 +3147,12 @@ const styles = StyleSheet.create({
   },
   signOutText: { color: colors.red, fontSize: 16, fontWeight: '700' },
   drawerCard: { marginTop: 12 },
+  branchBadge: { backgroundColor: colors.accent },
+  branchList: { marginTop: 14, marginBottom: 14 },
+  branchRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
+  branchRule: { borderBottomWidth: 1, borderBottomColor: colors.line },
+  branchIconOn: { backgroundColor: colors.accent },
+  branchOff: { color: colors.faint },
   notice: {
     color: colors.green,
     backgroundColor: colors.greenSoft,

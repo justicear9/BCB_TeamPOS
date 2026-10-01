@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Cashier",
+    "name": "TeamPOS",
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -10,13 +10,10 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.teampos.cashier",
       "infoPlist": {
-        "NSAppTransportSecurity": {
-          "NSAllowsArbitraryLoads": true,
-          "NSAllowsLocalNetworking": true
-        },
-        "NSLocalNetworkUsageDescription": "Cashier connects to your TeamPOS server on this network to sync sales, stock and customers."
+        "ITSAppUsesNonExemptEncryption": false
       },
-      "appleTeamId": "3J3YL7M99P"
+      "appleTeamId": "3J3YL7M99P",
+      "buildNumber": "1"
     },
     "android": {
       "adaptiveIcon": {
@@ -25,7 +22,7 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "usesCleartextTraffic": true,
+      "usesCleartextTraffic": false,
       "package": "com.teampos.cashier",
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
