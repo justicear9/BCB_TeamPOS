@@ -120,6 +120,7 @@ export function database() {
         'ALTER TABLE server_sale_lines ADD COLUMN variation_id INTEGER',
         'ALTER TABLE outbox ADD COLUMN cashier TEXT',
         'ALTER TABLE outbox ADD COLUMN created_at TEXT',
+        'ALTER TABLE products ADD COLUMN prices TEXT',
       ];
       for (const statement of alters) {
         try {

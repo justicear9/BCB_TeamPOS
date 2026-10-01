@@ -137,6 +137,7 @@ export function buildSalePayload({
   place,
   discount,
   points,
+  priceGroupId,
 }) {
   const payload = {
     type: 'sale.create',
@@ -164,6 +165,9 @@ export function buildSalePayload({
   }
   if (Number(points) > 0) {
     payload.rp_redeemed = Math.floor(Number(points));
+  }
+  if (priceGroupId != null) {
+    payload.selling_price_group_id = Number(priceGroupId);
   }
   if (place && Number.isFinite(place.latitude) && Number.isFinite(place.longitude)) {
     payload.latitude = place.latitude;
@@ -208,7 +212,8 @@ export function settlePayments(total, rows) {
   let remaining = bill;
   let change = 0;
   const payments = [];
-  for (const row of rows) {
+  const cashLast = [...rows.filter((row) => row.method !== 'cash'), ...rows.filter((row) => row.method === 'cash')];
+  for (const row of cashLast) {
     const raw = String(row.received ?? '').trim();
     if (raw === '' || raw === '.') {
       return { error: 'Enter the amount received.', payments: [], change: 0, due: bill, paid: 0 };
@@ -271,6 +276,37 @@ export function paymentStatus(total, paid) {
     return 'partial';
   }
   return 'due';
+}
+
+/**
+ * The product's price in a selling price group. Products synced before groups
+ * existed, or a group the shop has no price for, keep the shop price.
+ */
+export function priceInGroup(product, groupId) {
+  if (groupId == null) {
+    return Number(product.sell_price);
+  }
+  let prices = product.prices;
+  if (typeof prices === 'string') {
+    try {
+      prices = JSON.parse(prices);
+    } catch {
+      prices = null;
+    }
+  }
+  const price = prices?.[String(groupId)];
+  return price == null ? Number(product.sell_price) : Number(price);
+}
+
+export function repriceCart(lines, products, groupId) {
+  return lines.map((line) => {
+    const product = products.find((item) => item.variation_id === line.variation_id);
+    if (!product) {
+      return line;
+    }
+    const list = priceInGroup(product, groupId);
+    return line.price_override ? { ...line, list_price: list } : { ...line, unit_price: list, list_price: list };
+  });
 }
 
 export function addProduct(lines, product) {

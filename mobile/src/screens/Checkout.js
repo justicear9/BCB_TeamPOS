@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { BadgePercent, Banknote, ChevronRight, Gift, HandCoins, Pencil, User, Wallet } from 'lucide-react-native';
+import { BadgePercent, Banknote, ChevronRight, Gift, HandCoins, Pencil, Plus, User, Wallet, X } from 'lucide-react-native';
 import {
   creditAllowed,
   customerHeading,
@@ -17,6 +17,19 @@ const discountKinds = [
   { id: 'fixed', label: 'Amount' },
   { id: 'percentage', label: 'Percent' },
 ];
+
+/**
+ * The tender marked `auto` follows the balance left after the others until the cashier types into it.
+ */
+function rebalance(rows, total) {
+  const index = rows.findIndex((row) => row.auto);
+  if (index < 0) {
+    return rows;
+  }
+  const others = rows.reduce((sum, row, at) => (at === index ? sum : sum + (Number(row.received) || 0)), 0);
+  const left = Math.round((total - others) * 100) / 100;
+  return rows.map((row, at) => (at === index ? { ...row, received: left > 0 ? left.toFixed(2) : '' } : row));
+}
 
 export function pointsLimit(customer, rewards, subtotal) {
   if (!rewards || !customer || Number(customer.is_default) === 1) {
@@ -82,21 +95,45 @@ export default function Checkout({
   const heading = customer ? customerHeading(customer) : { title: 'Choose a customer', subtitle: '' };
   const count = cart.reduce((sum, line) => sum + line.quantity, 0);
   const maxPoints = pointsLimit(customer, rewards, totals.subtotal - totals.discountAmount);
-  const methodLabel = choices.find((method) => method.id === selected)?.label || 'Cash';
+  const labelOf = (id) => choices.find((method) => method.id === id)?.label || id;
+  const splitting = selected !== 'credit' && tenders.length > 1;
+  const canSplit = selected !== 'credit' && tenders.length < choices.length;
 
   useEffect(() => {
     if (selected === 'credit' && !creditSale.ok) {
       const cash = choices.find((method) => method.id === 'cash') || choices[0];
-      onTenders([{ method: cash.id, received: total.toFixed(2) }]);
+      onTenders([{ method: cash.id, received: total.toFixed(2), auto: true }]);
     }
   }, [selected, creditSale.ok]);
 
   function chooseMethod(id) {
-    onTenders(id === 'credit' ? [{ method: 'credit', received: '' }] : [{ method: id, received: total.toFixed(2) }]);
+    if (id === 'credit') {
+      onTenders([{ method: 'credit', received: '' }]);
+    } else if (splitting) {
+      onTenders(tenders.map((row, at) => (at === 0 ? { ...row, method: id } : row)));
+    } else {
+      onTenders([{ method: id, received: total.toFixed(2), auto: true }]);
+    }
   }
 
-  function setReceived(value) {
-    onTenders([{ method: selected, received: value }]);
+  function setReceived(index, value) {
+    onTenders(rebalance(tenders.map((row, at) => (at === index ? { ...row, received: value, auto: false } : row)), total));
+  }
+
+  function setTenderMethod(index, id) {
+    onTenders(tenders.map((row, at) => (at === index ? { ...row, method: id } : row)));
+  }
+
+  function addTender() {
+    const used = tenders.map((row) => row.method);
+    const next = choices.find((method) => !used.includes(method.id)) || choices[0];
+    const hasAuto = tenders.some((row) => row.auto);
+    onTenders(rebalance([...tenders, { method: next.id, received: '', auto: !hasAuto }], total));
+  }
+
+  function removeTender(index) {
+    const rest = tenders.filter((_, at) => at !== index);
+    onTenders(rebalance(rest.length === 1 ? [{ ...rest[0], auto: true }] : rest, total));
   }
 
   function openPrice(line) {
@@ -117,7 +154,7 @@ export default function Checkout({
 
   function syncTender(nextTotal) {
     if (selected !== 'credit') {
-      onTenders([{ method: selected, received: nextTotal.toFixed(2) }]);
+      onTenders(rebalance(tenders.length === 1 ? [{ ...tenders[0], auto: true }] : tenders, nextTotal));
     }
   }
 
@@ -135,14 +172,22 @@ export default function Checkout({
     draftProblem = 'Enter a price greater than zero.';
   }
 
-  let payLine = `${methodLabel} ${money(settlement.paid)}`;
-  if (selected === 'credit') {
-    payLine = `On credit ${money(total)}`;
-  } else if (settlement.due > 0.009) {
-    payLine = `${methodLabel} ${money(settlement.paid)} · On credit ${money(settlement.due)}`;
-  } else if (settlement.change > 0.009) {
-    payLine = `${methodLabel} ${money(tenders[0]?.received)} · Change ${money(settlement.change)}`;
+  let payLine = `On credit ${money(total)}`;
+  if (selected !== 'credit') {
+    payLine = [
+      ...settlement.payments.map((payment) => `${labelOf(payment.method)} ${money(payment.tendered)}`),
+      settlement.due > 0.009 ? `On credit ${money(settlement.due)}` : '',
+      settlement.change > 0.009 ? `Change ${money(settlement.change)}` : '',
+    ]
+      .filter(Boolean)
+      .join(' · ');
   }
+  const methodChoice = (method, index) => ({
+    id: method.id,
+    label: method.label,
+    icon: method.id === 'cash' ? Banknote : Wallet,
+    disabled: tenders.some((row, at) => at !== index && row.method === method.id),
+  });
 
   return (
     <SwipeBack onBack={onBack}>
@@ -288,7 +333,7 @@ export default function Checkout({
           <GroupLabel>Payment</GroupLabel>
           <ChoiceRow
             choices={[
-              ...choices.map((method) => ({ id: method.id, label: method.label, icon: method.id === 'cash' ? Banknote : Wallet })),
+              ...choices.map((method) => methodChoice(method, 0)),
               ...(canCredit ? [{ id: 'credit', label: 'Credit', icon: HandCoins, disabled: !creditSale.ok }] : []),
             ]}
             value={selected}
@@ -298,7 +343,51 @@ export default function Checkout({
             <Text style={kit.note}>The full amount stays on the customer’s account.</Text>
           ) : (
             <>
-              <MoneyField label="Amount received" value={tenders[0]?.received || ''} onChange={setReceived} />
+              <MoneyField
+                label={splitting ? `${labelOf(selected)} amount` : 'Amount received'}
+                value={tenders[0]?.received || ''}
+                onChange={(value) => setReceived(0, value)}
+              />
+              {tenders.slice(1).map((row, offset) => {
+                const index = offset + 1;
+                return (
+                  <View key={index} style={styles.tender}>
+                    <View style={styles.tenderHead}>
+                      <Text style={styles.tenderTitle}>Payment {index + 1}</Text>
+                      <Pressable
+                        onPress={() => removeTender(index)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Remove payment ${index + 1}`}
+                        hitSlop={8}
+                        style={({ pressed }) => [styles.tenderRemove, pressed && styles.pressed]}
+                      >
+                        <X color={colors.muted} size={16} strokeWidth={2.25} />
+                        <Text style={styles.tenderRemoveText}>Remove</Text>
+                      </Pressable>
+                    </View>
+                    <ChoiceRow
+                      choices={choices.map((method) => methodChoice(method, index))}
+                      value={row.method}
+                      onChange={(id) => setTenderMethod(index, id)}
+                    />
+                    <MoneyField
+                      label={`${labelOf(row.method)} amount`}
+                      value={row.received || ''}
+                      onChange={(value) => setReceived(index, value)}
+                    />
+                  </View>
+                );
+              })}
+              {canSplit ? (
+                <Pressable
+                  onPress={addTender}
+                  accessibilityRole="button"
+                  style={({ pressed }) => [styles.addTender, pressed && styles.pressed]}
+                >
+                  <Plus color={colors.accent} size={17} strokeWidth={2.5} />
+                  <Text style={styles.addTenderText}>Add another payment method</Text>
+                </Pressable>
+              ) : null}
             </>
           )}
           {canCredit && !creditSale.ok && selected !== 'credit' && settlement.due <= 0.009 ? (
@@ -460,4 +549,11 @@ const styles = StyleSheet.create({
   confirmWho: { color: colors.ink, fontSize: 16, fontWeight: '600', marginTop: 12 },
   confirmTotal: { color: colors.ink, fontSize: 34, fontWeight: '800', letterSpacing: -0.5, marginTop: 4 },
   sheetGap: { marginTop: 16 },
+  tender: { marginTop: 18, paddingTop: 14, borderTopWidth: 1, borderTopColor: colors.line, gap: 2 },
+  tenderHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  tenderTitle: { color: colors.ink, fontSize: 15, fontWeight: '700' },
+  tenderRemove: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  tenderRemoveText: { color: colors.muted, fontSize: 14, fontWeight: '600' },
+  addTender: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16, paddingVertical: 10, alignSelf: 'flex-start' },
+  addTenderText: { color: colors.accent, fontSize: 15, fontWeight: '700' },
 });

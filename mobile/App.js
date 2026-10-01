@@ -27,6 +27,8 @@ import Constants from 'expo-constants';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import {
   Banknote,
+  Check,
+  ChevronDown,
   ChevronRight,
   CircleCheck,
   Clock,
@@ -42,6 +44,7 @@ import {
   RefreshCw,
   Smartphone,
   Store,
+  Tag,
   User,
   UserPen,
   UserPlus,
@@ -64,7 +67,7 @@ import {
   saveCustomerLocally,
   saveReturnLocally,
 } from './src/sync';
-import { SwipeBack } from './src/kit';
+import { Sheet, SwipeBack } from './src/kit';
 import Checkout from './src/screens/Checkout';
 import CustomerForm from './src/screens/CustomerForm';
 import Drawer from './src/screens/Drawer';
@@ -89,7 +92,9 @@ import {
   money,
   paymentStatus,
   prettyDate,
+  priceInGroup,
   registerIsOpen,
+  repriceCart,
   saleTotals,
   settlePayments,
   tracksStock,
@@ -155,7 +160,16 @@ function Cashier() {
   const [customerView, setCustomerView] = useState(null);
   const [tenders, setTenders] = useState([{ method: 'cash', received: '' }]);
   const online = useOnline();
-  const [products, setProducts] = useState([]);
+  const [storedProducts, setProducts] = useState([]);
+  const [priceGroups, setPriceGroups] = useState({ options: [], default_id: null });
+  const [priceGroupId, setPriceGroupId] = useState(null);
+  const products = useMemo(
+    () =>
+      priceGroupId == null
+        ? storedProducts
+        : storedProducts.map((product) => ({ ...product, sell_price: String(priceInGroup(product, priceGroupId)) })),
+    [storedProducts, priceGroupId]
+  );
   const [cart, setCart] = useState([]);
   const [sales, setSales] = useState([]);
   const [returnsWaiting, setReturnsWaiting] = useState({});
@@ -237,6 +251,10 @@ function Cashier() {
     }
     setPaymentMethods(Array.isArray(storedMethods) ? storedMethods : []);
     setSettings(readJson(await metaGet('cashier_settings'), {}));
+    const groups = readJson(await metaGet('price_groups'), null) || { options: [], default_id: null };
+    const groupIds = (groups.options || []).map((option) => option.id);
+    setPriceGroups({ options: groups.options || [], default_id: groups.default_id ?? null });
+    setPriceGroupId((current) => (current != null && groupIds.includes(current) ? current : groups.default_id ?? null));
     setRegister(readJson(await metaGet('register'), null));
     setCustomerId((current) => {
       if (current && customerRows.some((row) => row.id === current)) {
@@ -357,6 +375,11 @@ function Cashier() {
     setCart((current) => addProduct(current, product));
   }, []);
 
+  function changePriceGroup(id) {
+    setPriceGroupId(id);
+    setCart((current) => repriceCart(current, storedProducts, id));
+  }
+
   function changeLine(variationId, quantity) {
     setCart((current) => {
       const line = current.find((item) => item.variation_id === variationId);
@@ -467,6 +490,7 @@ function Cashier() {
       place,
       discount,
       points: usedPoints,
+      priceGroupId,
     });
     const methodLabelForSale = settlement.due > 0.009 && settlement.paid <= 0.009
       ? 'Credit'
@@ -538,6 +562,7 @@ function Cashier() {
     setCart([]);
     setDiscount({ type: 'fixed', amount: 0 });
     setPoints(0);
+    setPriceGroupId(priceGroups.default_id ?? null);
     setStage('register');
     setReceipt({
       clientUuid,
@@ -1401,6 +1426,10 @@ function Cashier() {
           products={shownProducts}
           quantities={qtyById}
           onAdd={addToCart}
+          priceGroups={priceGroups.options}
+          priceGroupId={priceGroupId}
+          defaultPriceGroupId={priceGroups.default_id}
+          onPriceGroup={changePriceGroup}
           syncing={syncing}
           onSync={onSync}
           error={error}
@@ -1463,7 +1492,7 @@ function Cashier() {
           onNext={() => {
             const choices = paymentMethods.length > 0 ? paymentMethods : [{ id: 'cash', label: 'Cash' }];
             const cashId = choices.some((method) => method.id === 'cash') ? 'cash' : choices[0].id;
-            setTenders([{ method: cashId, received: total.toFixed(2) }]);
+            setTenders([{ method: cashId, received: total.toFixed(2), auto: true }]);
             setError('');
             setStage('confirm');
           }}
@@ -1821,10 +1850,18 @@ function Register({
   products,
   quantities,
   onAdd,
+  priceGroups = [],
+  priceGroupId,
+  defaultPriceGroupId,
+  onPriceGroup,
   syncing,
   onSync,
   error,
 }) {
+  const [choosingPrice, setChoosingPrice] = useState(false);
+  const canSwitch = priceGroups.length > 1 && Boolean(onPriceGroup);
+  const current = priceGroups.find((group) => group.id === priceGroupId);
+  const special = canSwitch && priceGroupId !== defaultPriceGroupId;
   return (
     <View style={styles.fill}>
       <ScreenHeader
@@ -1838,8 +1875,56 @@ function Register({
         }
       />
       <Banner message={error} />
-      <SearchField value={query} onChangeText={onQuery} placeholder="Search products" />
+      <View style={styles.searchRow}>
+        <View style={styles.searchGrow}>
+          <SearchField value={query} onChangeText={onQuery} placeholder="Search products" />
+        </View>
+        {canSwitch ? (
+          <Pressable
+            onPress={() => setChoosingPrice(true)}
+            accessibilityRole="button"
+            accessibilityLabel={`Prices: ${current?.name || 'Default price'}. Change price group`}
+            style={({ pressed }) => [styles.priceChip, special && styles.priceChipOn, pressed && styles.pressed]}
+          >
+            <Tag color={special ? colors.accent : colors.muted} size={16} strokeWidth={2.25} />
+            <Text style={[styles.priceChipText, special && styles.priceChipTextOn]} numberOfLines={1}>
+              {special && current ? current.name : 'Prices'}
+            </Text>
+            <ChevronDown color={special ? colors.accent : colors.muted} size={16} strokeWidth={2.25} />
+          </Pressable>
+        ) : null}
+      </View>
       <StockFilter value={filter} onChange={onFilter} counts={counts} />
+      <Sheet
+        visible={choosingPrice}
+        title="Price group"
+        subtitle="Products and the cart use these prices. It goes back to the shop’s usual prices after each sale."
+        onClose={() => setChoosingPrice(false)}
+      >
+        <View style={styles.priceList}>
+          {priceGroups.map((group, index) => {
+            const selected = group.id === priceGroupId;
+            return (
+              <Pressable
+                key={group.id}
+                onPress={() => {
+                  onPriceGroup(group.id);
+                  setChoosingPrice(false);
+                }}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                style={({ pressed }) => [styles.priceOption, index < priceGroups.length - 1 && styles.priceRule, pressed && styles.pressed]}
+              >
+                <View style={styles.fill}>
+                  <Text style={[styles.priceOptionText, selected && styles.priceOptionTextOn]}>{group.name}</Text>
+                  {group.id === defaultPriceGroupId ? <Text style={styles.priceOptionHint}>Usual prices for this shop</Text> : null}
+                </View>
+                {selected ? <Check color={colors.accent} size={20} strokeWidth={2.5} /> : null}
+              </Pressable>
+            );
+          })}
+        </View>
+      </Sheet>
       <FlatList
         style={styles.fill}
         data={products}
@@ -2411,6 +2496,12 @@ const SAMPLE_PRODUCTS = [
   { product_id: 4, variation_id: 4, name: 'Beef pie', variation_name: 'DUMMY', sku: 'BP', sell_price: '15', qty_available: '6' },
 ];
 
+const SAMPLE_PRICE_GROUPS = [
+  { id: 0, name: 'Default price' },
+  { id: 4, name: 'Wholesale' },
+];
+const SAMPLE_GROUP_PRICES = { 1: 15, 2: 7, 3: 10, 4: 12.5 };
+
 function WebPreview({ name }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -2427,12 +2518,12 @@ function WebPreview({ name }) {
         ? 'account'
         : name === 'customers'
           ? 'customers'
-          : name === 'register'
+          : name === 'register' || name === 'register-wholesale'
             ? 'sell'
             : 'home'
   );
   const [method, setMethod] = useState('cash');
-  const [tenders, setTenders] = useState([{ method: 'cash', received: '17.00' }]);
+  const [tenders, setTenders] = useState([{ method: 'cash', received: '17.00', auto: true }]);
   const [customerPick, setCustomerPick] = useState(null);
   const [openedSale, setOpenedSale] = useState(name === 'sale' ? previewSales()[1] : null);
   const [previewSaleFilter, setPreviewSaleFilter] = useState('all');
@@ -2450,7 +2541,11 @@ function WebPreview({ name }) {
     serverId: 1,
     syncState: 'synced',
   } : null);
-  const products = visibleProducts(SAMPLE_PRODUCTS, query, filter);
+  const [previewGroup, setPreviewGroup] = useState(name === 'register-wholesale' ? 4 : 0);
+  const pricedSamples = SAMPLE_PRODUCTS.map((product) => (
+    previewGroup === 4 ? { ...product, sell_price: String(SAMPLE_GROUP_PRICES[product.variation_id]) } : product
+  ));
+  const products = visibleProducts(pricedSamples, query, filter);
   const qtyById = Object.fromEntries(cart.map((line) => [line.variation_id, line.quantity]));
   if (name === 'splash') {
     return <Splash title="Cashier" />;
@@ -2657,6 +2752,10 @@ function WebPreview({ name }) {
           products={products}
           quantities={qtyById}
           onAdd={(product) => setCart((current) => addProduct(current, product))}
+          priceGroups={SAMPLE_PRICE_GROUPS}
+          priceGroupId={previewGroup}
+          defaultPriceGroupId={0}
+          onPriceGroup={setPreviewGroup}
           syncing={false}
           onSync={() => {}}
           error=""
@@ -3011,6 +3110,29 @@ const styles = StyleSheet.create({
   locationHint: { marginTop: 4, color: colors.muted, fontSize: 13 },
   pressed: { opacity: 0.72 },
   syncLink: { color: colors.accent, fontWeight: '700', fontSize: 15 },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  searchGrow: { flex: 1, minWidth: 0 },
+  priceChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    maxWidth: '45%',
+    minHeight: 52,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+  },
+  priceChipOn: { backgroundColor: colors.accentSoft, borderColor: colors.accent },
+  priceChipText: { flexShrink: 1, color: colors.ink, fontSize: 14, fontWeight: '700' },
+  priceChipTextOn: { color: colors.accent },
+  priceList: { marginTop: 12 },
+  priceOption: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 },
+  priceRule: { borderBottomWidth: 1, borderBottomColor: colors.line },
+  priceOptionText: { color: colors.ink, fontSize: 16, fontWeight: '600' },
+  priceOptionTextOn: { color: colors.accent, fontWeight: '700' },
+  priceOptionHint: { color: colors.muted, fontSize: 13, fontWeight: '500', marginTop: 2 },
   chips: { maxHeight: 52, marginTop: 12 },
   chipsInline: { flexDirection: 'row', marginTop: 12, marginBottom: 4 },
   chipRow: { paddingRight: 8 },

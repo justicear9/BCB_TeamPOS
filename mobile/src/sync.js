@@ -41,15 +41,16 @@ export async function pullLocation(locationId) {
     }
     for (const product of json.products) {
       await db.runAsync(
-        `INSERT INTO products (variation_id, product_id, name, variation_name, sku, sell_price, qty_available, enable_stock)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO products (variation_id, product_id, name, variation_name, sku, sell_price, qty_available, enable_stock, prices)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(variation_id) DO UPDATE SET
            name = excluded.name,
            variation_name = excluded.variation_name,
            sku = excluded.sku,
            sell_price = excluded.sell_price,
            qty_available = excluded.qty_available,
-           enable_stock = excluded.enable_stock`,
+           enable_stock = excluded.enable_stock,
+           prices = excluded.prices`,
         product.variation_id,
         product.product_id,
         product.name,
@@ -57,7 +58,8 @@ export async function pullLocation(locationId) {
         product.sku,
         product.sell_price,
         product.qty_available,
-        product.enable_stock === 0 ? 0 : 1
+        product.enable_stock === 0 ? 0 : 1,
+        product.prices ? JSON.stringify(product.prices) : null
       );
     }
     const listed = json.products.map((product) => Number(product.variation_id));
@@ -175,6 +177,7 @@ export async function pullLocation(locationId) {
     await metaSet('business_name', json.location.business_name);
   }
   await metaSet('payment_methods', JSON.stringify(json.payment_methods || []));
+  await metaSet('price_groups', JSON.stringify(json.price_groups || { options: [], default_id: null }));
   if (json.receipt) {
     await metaSet('receipt_layout', JSON.stringify(json.receipt));
   }
