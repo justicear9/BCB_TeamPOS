@@ -1,0 +1,53 @@
+App name (30)
+Cashier for TeamPOS
+
+Short description (80)
+Fast offline checkout for TeamPOS shops: sell, take payments and sync sales.
+
+Full description (4000)
+Cashier is the mobile till for businesses that run on TeamPOS. Sign in with your TeamPOS account, pick the shop you are selling from, and start ringing up sales from your phone or tablet.
+
+Keep selling when the internet drops
+Products, prices, stock and customers are saved on the device, so you can keep taking sales with no connection. Sales, returns, payments and new customers wait safely on the phone and go to TeamPOS automatically when you are back online.
+
+Quick checkout
+• Search or browse products and build the cart in a few taps
+• See stock on hand for your shop
+• Take payment with the methods your business has set up, such as cash, mobile money, card or bank transfer
+• Split or part-pay a sale and add the rest of the payment later
+• Print or share receipts using your shop's receipt layout
+
+Customers and credit
+• Find customers by name, business or phone number
+• Add new customers at the till
+• Sell on credit where a manager has allowed it, and see what each customer owes
+• Show reward points on the sale
+
+Returns and sale history
+• Look up recent sales and their invoice numbers
+• Take returns on synced sales, even while offline
+• See which sales are still waiting to reach TeamPOS
+
+Cash register
+• Open the register with the float in the drawer before you start selling
+• Close it at the end of the day, here or from TeamPOS
+• Managers see register activity in TeamPOS in real time
+
+Built for teams
+• Each cashier signs in with their own TeamPOS user
+• Only the shops a user is allowed to sell from appear
+• Every sale is recorded against the cashier and location
+
+Location
+When you save a sale, Cashier records your precise location so the business can see where each sale was taken. Location is only used while the app is open and in use.
+
+Requirements
+Cashier works with a TeamPOS business account. Ask your manager or TeamPOS administrator for your sign-in details.
+
+Graphics (store-assets/play/)
+App icon             app-icon-512.png               512 x 512
+Feature graphic      feature-graphic-1024x500.png   1024 x 500
+Phone screenshots    phone/01..06-*.png             1080 x 1920 (upload in order)
+
+Category: Business
+Tags: Point of sale, Business tools
