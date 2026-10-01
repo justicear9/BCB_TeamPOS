@@ -8,6 +8,27 @@
       "android": {
         "buildType": "apk"
       }
+    },
+    "production": {
+      "environment": "production",
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      }
+    },
+    "bovel": {
+      "extends": "preview",
+      "env": {
+        "CASHIER_API_BASE_URL": "https://bovel.teamjaketech.com"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "android": {
+        "track": "internal",
+        "releaseStatus": "draft"
+      }
     }
   }
 }
