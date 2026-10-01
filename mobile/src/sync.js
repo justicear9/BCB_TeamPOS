@@ -145,7 +145,8 @@ export async function pullLocation(locationId) {
        FROM sale_lines
        JOIN sales ON sales.client_uuid = sale_lines.client_uuid
        JOIN products ON products.variation_id = sale_lines.variation_id
-       WHERE sales.sync_state = 'pending' AND products.enable_stock = 1`
+       WHERE sales.sync_state = 'pending' AND products.enable_stock = 1 AND sales.location_id = ?`,
+      locationId
     );
     for (const line of pending) {
       if (!refreshed.has(Number(line.variation_id))) {
@@ -157,7 +158,7 @@ export async function pullLocation(locationId) {
         line.variation_id
       );
     }
-    for (const item of await waitingReturnStock(db)) {
+    for (const item of await waitingReturnStock(db, locationId)) {
       if (refreshed.has(Number(item.variation_id))) {
         await db.runAsync(
           'UPDATE products SET qty_available = qty_available + ? WHERE variation_id = ? AND enable_stock = 1',
@@ -424,8 +425,10 @@ async function waitingReturns(db) {
   return rows.map((row) => ({ ...JSON.parse(row.payload), error: row.error }));
 }
 
-async function waitingReturnStock(db) {
-  return (await waitingReturns(db)).flatMap((item) => item.local?.stock || []);
+async function waitingReturnStock(db, locationId) {
+  return (await waitingReturns(db))
+    .filter((item) => Number(item.local?.location_id) === Number(locationId))
+    .flatMap((item) => item.local?.stock || []);
 }
 
 /** Returns saved on this phone that TeamPOS has not taken yet, by sale. */
