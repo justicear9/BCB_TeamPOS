@@ -2691,6 +2691,28 @@ function WebPreview({ name }) {
                   { method: 'cash', total: '164.5' },
                   { method: 'custom_pay_1', total: '42' },
                 ],
+                products_by_group: [
+                  {
+                    id: 0,
+                    name: 'Default price',
+                    quantity: '9',
+                    total: '114.5',
+                    products: [
+                      { variation_id: 2, name: 'Butter croissant', quantity: '5', total: '42.5' },
+                      { variation_id: 1, name: 'Sourdough loaf', quantity: '4', total: '72' },
+                    ],
+                  },
+                  {
+                    id: 4,
+                    name: 'Wholesale',
+                    quantity: '12',
+                    total: '117',
+                    products: [
+                      { variation_id: 4, name: 'Beef pie', quantity: '6', total: '75' },
+                      { variation_id: 2, name: 'Butter croissant', quantity: '6', total: '42' },
+                    ],
+                  },
+                ],
               }
             : { open: false }
         }

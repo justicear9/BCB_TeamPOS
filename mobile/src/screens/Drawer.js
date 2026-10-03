@@ -5,6 +5,40 @@ import { money, prettyDate } from '../format';
 import { Banner, PrimaryButton, ScreenHeader, colors } from '../ui';
 import { Group, GroupLabel, Hero, KeyboardScreen, MoneyField, Row, SwipeBack, kit } from '../kit';
 
+function quantity(value) {
+  return String(Math.round(Number(value || 0) * 100) / 100);
+}
+
+/** Products sold this shift, one block per selling price group. */
+function SoldByGroup({ groups }) {
+  if (!groups?.length) {
+    return null;
+  }
+  return (
+    <>
+      {groups.map((group) => (
+        <View key={group.id}>
+          <GroupLabel action={<Text style={styles.groupTotal}>{`${quantity(group.quantity)} sold · ${money(group.total)}`}</Text>}>
+            {group.name}
+          </GroupLabel>
+          <Group>
+            {group.products.map((product, index) => (
+              <Row
+                key={product.variation_id}
+                label={product.name}
+                hint={money(product.total)}
+                value={`× ${quantity(product.quantity)}`}
+                last={index === group.products.length - 1}
+              />
+            ))}
+          </Group>
+        </View>
+      ))}
+      <Text style={kit.note}>Includes sales on credit, so it can be more than the money taken.</Text>
+    </>
+  );
+}
+
 /**
  * The cashier's TeamPOS cash register: open it with the float in the drawer,
  * close it by counting the cash at the end of the shift.
@@ -38,6 +72,7 @@ export default function Drawer({ register, methods, canClose, busy, error, onlin
             <Row icon={Banknote} label="Expected cash" value={money(closed.expected_cash)} />
             <Row icon={Wallet} label="Sales" value={money(closed.total_sales)} last />
           </Group>
+          <SoldByGroup groups={closed.products_by_group} />
         </ScrollView>
         <View style={kit.bar}>
           <PrimaryButton label="Done" onPress={onBack} />
@@ -77,6 +112,7 @@ export default function Drawer({ register, methods, canClose, busy, error, onlin
                 ))}
                 <Row icon={RotateCcw} tint={colors.redSoft} color={colors.red} label="Refunds" value={money(register.total_refunds)} last />
               </Group>
+              <SoldByGroup groups={register.products_by_group} />
               {canClose ? (
                 <>
                   <MoneyField label="Cash counted in the drawer" value={amount} onChange={setAmount} />
@@ -140,6 +176,7 @@ export default function Drawer({ register, methods, canClose, busy, error, onlin
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  groupTotal: { color: colors.muted, fontSize: 12, fontWeight: '700' },
   diff: { fontSize: 14, fontWeight: '700', marginTop: 10 },
   ok: { color: colors.green },
   off: { color: colors.amber },

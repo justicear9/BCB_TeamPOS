@@ -61,7 +61,75 @@ class CashierRegister
             'total_refunds' => (string) round((float) $details->total_refund, 4),
             'expected_cash' => (string) round($expectedCash, 4),
             'by_method' => $methods,
+            'products_by_group' => $this->productsByGroup($user, $register),
         ];
+    }
+
+    /**
+     * What the cashier sold at the register's location since it opened, per
+     * selling price group and product. Uses the sale's own date so sales that
+     * sync late still count in the shift they were rung up in. Sales with no
+     * price group count under the default price.
+     */
+    private function productsByGroup(User $user, CashRegister $register): array
+    {
+        $rows = DB::table('transactions as t')
+            ->join('transaction_sell_lines as tsl', 'tsl.transaction_id', '=', 't.id')
+            ->join('variations as v', 'v.id', '=', 'tsl.variation_id')
+            ->join('products as p', 'p.id', '=', 'v.product_id')
+            ->leftJoin('selling_price_groups as spg', 'spg.id', '=', 't.selling_price_group_id')
+            ->where('t.business_id', $user->business_id)
+            ->where('t.created_by', $user->id)
+            ->where('t.location_id', $register->location_id)
+            ->where('t.type', 'sell')
+            ->where('t.status', 'final')
+            ->where('t.transaction_date', '>=', $register->getRawOriginal('created_at'))
+            ->where('tsl.children_type', '!=', 'combo')
+            ->groupBy('t.selling_price_group_id', 'spg.name', 'v.id', 'p.name', 'p.type', 'v.name')
+            ->select(
+                't.selling_price_group_id as group_id',
+                'spg.name as group_name',
+                'v.id as variation_id',
+                'p.name as product_name',
+                'p.type as product_type',
+                'v.name as variation_name',
+                DB::raw('SUM(tsl.quantity) as quantity'),
+                DB::raw('SUM(tsl.unit_price_inc_tax * tsl.quantity) as total')
+            )
+            ->get();
+
+        $groups = [];
+        foreach ($rows as $row) {
+            $id = (int) $row->group_id;
+            $groups[$id] ??= [
+                'id' => $id,
+                'name' => $id > 0 ? ($row->group_name ?: 'Price group '.$id) : 'Default price',
+                'quantity' => 0.0,
+                'total' => 0.0,
+                'products' => [],
+            ];
+            $name = $row->product_type === 'variable' && $row->variation_name
+                ? $row->product_name.' ('.$row->variation_name.')'
+                : $row->product_name;
+            $groups[$id]['products'][] = [
+                'variation_id' => (int) $row->variation_id,
+                'name' => $name,
+                'quantity' => (string) round((float) $row->quantity, 4),
+                'total' => (string) round((float) $row->total, 4),
+            ];
+            $groups[$id]['quantity'] += (float) $row->quantity;
+            $groups[$id]['total'] += (float) $row->total;
+        }
+
+        uasort($groups, fn ($a, $b) => [$a['id'] > 0, $a['name']] <=> [$b['id'] > 0, $b['name']]);
+
+        return array_values(array_map(function ($group) {
+            usort($group['products'], fn ($a, $b) => strcasecmp($a['name'], $b['name']));
+            $group['quantity'] = (string) round($group['quantity'], 4);
+            $group['total'] = (string) round($group['total'], 4);
+
+            return $group;
+        }, $groups));
     }
 
     public function open(User $user, int $locationId, float $openingCash): CashRegister
