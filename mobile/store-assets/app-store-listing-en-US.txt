@@ -1,0 +1,93 @@
+App Store Connect listing (English U.S.)
+
+Name (30)
+TeamPOS Cashier
+
+Subtitle (30)
+Offline checkout for TeamPOS
+
+Promotional text (170)
+Sell from your phone or iPad, even with no internet. Split a payment across cash, MoMo and card, switch price lists, and every sale syncs to TeamPOS.
+
+Keywords (100, comma separated, no spaces)
+pos,point of sale,cashier,till,checkout,shop,retail,offline,receipt,inventory,stock,sales,register
+
+Description (4000)
+TeamPOS Cashier is the mobile till for businesses that run on TeamPOS. Sign in with your TeamPOS account, pick the shop you are selling from, and start ringing up sales from your iPhone or iPad.
+
+Keep selling when the internet drops
+Products, prices, stock and customers are saved on the device, so you can keep taking sales with no connection. Sales, returns, payments and new customers wait safely on the device and go to TeamPOS automatically when you are back online.
+
+Quick checkout
+• Search or browse products and build the cart in a few taps
+• See stock on hand for your shop
+• Switch between the price lists your business uses, such as retail or wholesale
+• Take payment with the methods your business has set up, such as cash, mobile money, card or bank transfer
+• Split one sale across more than one payment method
+• Part-pay a sale and add the rest of the payment later
+• Print or share receipts using your shop's receipt layout
+
+Customers and credit
+• Find customers by name, business or phone number
+• Add new customers at the till
+• Sell on credit where a manager has allowed it, and see what each customer owes
+• Show reward points on the sale
+
+Returns and sale history
+• Look up recent sales and their invoice numbers
+• Take returns on synced sales, even while offline
+• See which sales are still waiting to reach TeamPOS
+
+Cash register
+• Open the register with the float in the drawer before you start selling
+• Close it at the end of the day, here or from TeamPOS
+• Managers see register activity in TeamPOS in real time
+
+Built for teams
+• Each cashier signs in with their own TeamPOS user
+• Only the shops a user is allowed to sell from appear
+• Switch branch from the Account tab if you work at more than one shop
+• Every sale is recorded against the cashier and location
+
+Location
+When you save a sale, TeamPOS Cashier records your precise location so the business can see where each sale was taken. Location is only used while the app is open and in use.
+
+Requirements
+TeamPOS Cashier works with a TeamPOS business account. Ask your manager or TeamPOS administrator for your sign-in details.
+
+URLs
+Support URL           https://teamjaketech.com/contact
+Marketing URL         https://teamjaketech.com
+Privacy Policy URL    https://teamjaketech.com/privacy-policy
+
+Categories
+Primary: Business
+Secondary: Productivity
+
+Age rating
+4+ (answer "None" to every content question; no in-app controls or age assurance)
+
+Copyright
+2026 TeamJake Tech
+
+App Review Information
+Sign-in required: Yes
+Username: <create a demo cashier user in TeamPOS on bcb with one shop and an open register>
+Password: <its password>
+Notes:
+TeamPOS Cashier is the point-of-sale companion app for businesses that use the TeamPOS back office. Any business on TeamPOS can use it; accounts are created by the business's TeamPOS administrator, and there is no fee or in-app purchase in the app. Sign in with the demo account above, tap the (+) tab, add products to the cart, tap Next, then Charge to save a sale. The Sales tab shows the sale, and the Account tab shows sync status and the cash register.
+
+App Privacy (nutrition label)
+Data used to track you: None
+Data linked to you:
+  • Location > Precise Location: App Functionality (recorded on each sale)
+  • Identifiers > User ID: App Functionality (TeamPOS cashier sign-in)
+No advertising or analytics SDKs. Do not add an App Tracking Transparency prompt.
+
+Export compliance
+Uses only standard HTTPS encryption (ITSAppUsesNonExemptEncryption = false in the build).
+
+Screenshots (store-assets/ios/, upload in order)
+iPhone 6.9" display   iphone-6.9/01..06-*.png   1320 x 2868
+iPad 13" display      ipad-13/01..06-*.png      2064 x 2752
+App Store icon        app-store-icon-1024.png   1024 x 1024 (no transparency; taken from the build automatically)
