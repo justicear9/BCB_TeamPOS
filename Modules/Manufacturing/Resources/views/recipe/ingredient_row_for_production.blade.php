@@ -13,9 +13,11 @@
 			$allow_decimal = $ingredient['allow_decimal'];
 			$qty_available = 0;
 			if($ingredient['enable_stock'] == 1) {
-				$max_qty_rule = !empty($variation->variation_location_details[0]->qty_available) ? $variation->variation_location_details[0]->qty_available : 0;
+				$max_qty_rule = array_key_exists('qty_available', $ingredient)
+					? $ingredient['qty_available']
+					: (!empty($variation->variation_location_details[0]->qty_available) ? $variation->variation_location_details[0]->qty_available : 0);
 				$qty_available = $max_qty_rule;
-				$max_qty_rule = $max_qty_rule / $multiplier;
+				$max_qty_rule = $multiplier != 0 ? $max_qty_rule / $multiplier : $max_qty_rule;
 				$max_qty_msg = __('validation.custom-messages.quantity_not_available', ['qty'=> number_format($max_qty_rule, 2), 'unit' => $ingredient['unit']  ]);
 			}
 			

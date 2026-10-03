@@ -38,6 +38,7 @@ class ManufacturingUtil extends Util
         //Format variation data
         foreach ($ingredient_variations as $ingredient_variation) {
             $variation = $ingredient_variation->variation;
+            $qty_available = $this->locationQty($variation, $location_id);
             //If base unit has sub_units get details
             $sub_units = $this->getSubUnits($business_id, $variation->product->unit->id);
             $unit_name = $variation->product->unit->short_name;
@@ -78,6 +79,7 @@ class ManufacturingUtil extends Util
                 'allow_decimal' => $variation->product->unit->allow_decimal,
                 'variation' => $variation,
                 'enable_stock' => $variation->product->enable_stock,
+                'qty_available' => $qty_available,
                 'is_sub_unit' => $is_sub_unit,
                 'sub_units' => $sub_units,
                 'sub_unit_id' => $sub_unit_id,
@@ -93,6 +95,22 @@ class ManufacturingUtil extends Util
         }
 
         return $ingredients;
+    }
+
+    /**
+     * Stock of a variation at one location, in the product's base unit.
+     */
+    public function locationQty($variation, $location_id): float
+    {
+        if (empty($location_id) || empty($variation)) {
+            return 0;
+        }
+
+        $match = $variation->variation_location_details->first(function ($row) use ($location_id) {
+            return (int) $row->location_id === (int) $location_id;
+        });
+
+        return (float) ($match->qty_available ?? 0);
     }
 
     /**

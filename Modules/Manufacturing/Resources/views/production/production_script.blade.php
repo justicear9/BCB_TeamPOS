@@ -23,8 +23,8 @@
 	    production_form_validator = $('#production_form').validate();
 	});
 	$(document).on('change', '#production_form #variation_id, #production_form #location_id', function () {
-		var variation_id = $("#variation_id").val();
-		var location_id = $("#location_id").val();
+		var variation_id = $('#production_form #variation_id').val();
+		var location_id = $('#production_form #location_id').val();
 		
 		if(variation_id && location_id) {
 			$.ajax({

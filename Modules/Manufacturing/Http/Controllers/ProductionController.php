@@ -591,6 +591,7 @@ class ProductionController extends Controller
                 'allow_decimal' => $allow_decimal,
                 'variation' => $variation,
                 'enable_stock' => $variation->product->enable_stock,
+                'qty_available' => $this->mfgUtil->locationQty($variation, $production_purchase->location_id),
                 'is_sub_unit' => $is_line_sub_unit,
                 'sub_units' => $line_sub_units,
                 'sub_unit_id' => $line_sub_unit_id,
