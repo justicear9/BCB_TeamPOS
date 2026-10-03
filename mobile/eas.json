@@ -27,6 +27,7 @@
   "submit": {
     "production": {
       "android": {
+        "serviceAccountKeyPath": "../../jake-504007-f96dc0b46fe5.json",
         "track": "internal",
         "releaseStatus": "draft"
       }
